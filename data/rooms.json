@@ -1,0 +1,26 @@
+[
+  {
+    "id": "room-101",
+    "name": "Room 101 - Main Auditorium",
+    "building": "Academic Building 1",
+    "capacity": 60,
+    "default_start_time": "09:00",
+    "default_end_time": "12:00"
+  },
+  {
+    "id": "room-202",
+    "name": "Room 202 - CS & AI Lab",
+    "building": "IT Complex",
+    "capacity": 40,
+    "default_start_time": "09:00",
+    "default_end_time": "12:00"
+  },
+  {
+    "id": "room-405",
+    "name": "Room 405 - Science Hall",
+    "building": "Science Tower",
+    "capacity": 50,
+    "default_start_time": "09:00",
+    "default_end_time": "12:00"
+  }
+]

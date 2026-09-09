@@ -1,0 +1,136 @@
+[
+  {
+    "id": "dept-cse",
+    "name": "Computer Science & Engineering",
+    "code": "CSE",
+    "courses": [
+      {
+        "id": "crs-cse-1",
+        "code": "CSE-1101",
+        "title": "Structured Programming Language",
+        "enrolled_student_ids": [
+          "7bf0222a"
+        ]
+      },
+      {
+        "id": "crs-cse-2",
+        "code": "CSE-2101",
+        "title": "Data Structures & Algorithms",
+        "enrolled_student_ids": [
+          "7bf0222a"
+        ]
+      },
+      {
+        "id": "crs-cse-3",
+        "code": "CSE-3101",
+        "title": "Database Management Systems",
+        "enrolled_student_ids": [
+          "7bf0222a"
+        ]
+      },
+      {
+        "id": "crs-cse-4",
+        "code": "CSE-4101",
+        "title": "Artificial Intelligence & Neural Networks",
+        "enrolled_student_ids": [
+          "7bf0222a"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dept-swe",
+    "name": "Software Engineering",
+    "code": "SWE",
+    "courses": [
+      {
+        "id": "crs-swe-1",
+        "code": "SWE-1101",
+        "title": "Introduction to Software Engineering",
+        "enrolled_student_ids": []
+      },
+      {
+        "id": "crs-swe-2",
+        "code": "SWE-2101",
+        "title": "Software Requirements & Architecture",
+        "enrolled_student_ids": []
+      },
+      {
+        "id": "crs-swe-3",
+        "code": "SWE-3101",
+        "title": "Full-Stack Web & Cloud Development",
+        "enrolled_student_ids": []
+      }
+    ]
+  },
+  {
+    "id": "dept-eee",
+    "name": "Electrical & Electronic Engineering",
+    "code": "EEE",
+    "courses": [
+      {
+        "id": "crs-eee-1",
+        "code": "EEE-1101",
+        "title": "Basic Electrical Circuit Analysis",
+        "enrolled_student_ids": []
+      },
+      {
+        "id": "crs-eee-2",
+        "code": "EEE-2101",
+        "title": "Electronic Devices & Analog Circuits",
+        "enrolled_student_ids": []
+      }
+    ]
+  },
+  {
+    "id": "dept-bba",
+    "name": "Business Administration",
+    "code": "BBA",
+    "courses": [
+      {
+        "id": "crs-bba-1",
+        "code": "BBA-1101",
+        "title": "Principles of Management",
+        "enrolled_student_ids": []
+      },
+      {
+        "id": "crs-bba-2",
+        "code": "BBA-2101",
+        "title": "Financial & Managerial Accounting",
+        "enrolled_student_ids": []
+      }
+    ]
+  },
+  {
+    "id": "dept-ce",
+    "name": "Civil Engineering",
+    "code": "CE",
+    "courses": [
+      {
+        "id": "crs-ce-1",
+        "code": "CE-1101",
+        "title": "Engineering Mechanics & Graphics",
+        "enrolled_student_ids": []
+      },
+      {
+        "id": "crs-ce-2",
+        "code": "CE-2101",
+        "title": "Mechanics of Solids & Structural Analysis",
+        "enrolled_student_ids": []
+      }
+    ]
+  },
+  {
+    "id": "dept-rob",
+    "name": "Robotics & Mechatronics",
+    "code": "ROB",
+    "courses": [
+      {
+        "id": "crs-rob-1",
+        "code": "ROB-1101",
+        "title": "Introduction to Robotics",
+        "enrolled_student_ids": []
+      }
+    ]
+  }
+]

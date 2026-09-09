@@ -1,0 +1,74 @@
+{
+  "2026-08-27": {
+    "05402b91": {
+      "candidate_id": "05402b91",
+      "name": "Imran",
+      "roll_id": "202314117",
+      "department": "CSE",
+      "room_id": "room-101",
+      "room_name": "Room 101 - Main Auditorium",
+      "seat_number": "Assigned Seat",
+      "admit_status": "CLEARED",
+      "date": "2026-08-27",
+      "exam_name": "Data Structures & Algorithms - Final",
+      "hall_name": "Room 101 - Main Auditorium",
+      "status": "INSIDE",
+      "entry_time": "12:29:04 PM",
+      "entry_iso": "2026-08-27T12:29:04.237013",
+      "entry_snapshot": "attendance/snapshots/2026-08-27/05402b91/entry_1787812144.jpg",
+      "exit_time": null,
+      "exit_iso": null,
+      "exit_snapshot": null,
+      "duration_minutes": null,
+      "washroom_out_time": null,
+      "washroom_out_iso": null,
+      "washroom_out_snapshot": null,
+      "washroom_count": 1,
+      "total_washroom_minutes": 0.5,
+      "has_washroom_violation": false,
+      "washroom_logs": [
+        {
+          "out_time": "12:30:39 PM",
+          "out_iso": "2026-08-27T12:30:39.075744",
+          "in_time": "12:31:08 PM",
+          "in_iso": "2026-08-27T12:31:08.593276",
+          "duration_minutes": 0.5,
+          "limit_minutes": 10,
+          "is_overtime": false,
+          "overtime_minutes": 0.0,
+          "snapshot_out": "attendance/snapshots/2026-08-27/05402b91/washroom_out_1787812239.jpg",
+          "snapshot_in": "attendance/snapshots/2026-08-27/05402b91/washroom_in_1787812268.jpg"
+        }
+      ],
+      "last_break": {
+        "out_time": "12:30:39 PM",
+        "out_iso": "2026-08-27T12:30:39.075744",
+        "in_time": "12:31:08 PM",
+        "in_iso": "2026-08-27T12:31:08.593276",
+        "duration_minutes": 0.5,
+        "limit_minutes": 10,
+        "is_overtime": false,
+        "overtime_minutes": 0.0,
+        "snapshot_out": "attendance/snapshots/2026-08-27/05402b91/washroom_out_1787812239.jpg",
+        "snapshot_in": "attendance/snapshots/2026-08-27/05402b91/washroom_in_1787812268.jpg"
+      }
+    }
+  },
+  "2026-09-09": {
+    "c86109f1": {
+      "candidate_id": "c86109f1",
+      "name": "Fardin",
+      "room_id": "room-101",
+      "status": "EXITED",
+      "entry_time": "09:45:00 AM",
+      "entry_iso": "2026-09-09T09:45:00",
+      "date": "2026-09-09",
+      "exit_time": "01:35:00 PM",
+      "exit_iso": "2026-09-09T13:35:00",
+      "is_auto_exit": true,
+      "auto_exit_reason": "Auto-exited: 30 minutes elapsed after exam ended at 13:00.",
+      "duration_minutes": 230.0
+    }
+  },
+  "2026-09-10": {}
+}

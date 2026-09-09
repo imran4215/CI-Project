@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "target": "es2022",
+    "jsx": "preserve",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": false
+  },
+  "include": ["next-env.d.ts", "**/*.js", "**/*.jsx", "**/*.cjs", "**/*.mjs"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,15 @@
+{
+  "7bf0222a": {
+    "candidate_id": "7bf0222a",
+    "name": "Imran",
+    "roll_id": "202314117",
+    "department": "Computer Science & Engineering",
+    "room_id": "room-101",
+    "room_name": "Room 101 - Main Auditorium",
+    "seat_number": "Seat A-01",
+    "admit_status": "CLEARED",
+    "remarks": "",
+    "special_clearance_by": null,
+    "updated_at": "2026-09-10T02:46:09.621223"
+  }
+}

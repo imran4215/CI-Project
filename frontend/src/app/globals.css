@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-dark: #070b13;
+    --bg-secondary: #0d1424;
+    --panel-border: rgba(56, 189, 248, 0.18);
+    --panel-glow: rgba(0, 240, 255, 0.08);
+  }
+
+  body {
+    background-color: var(--bg-dark);
+    color: #e2e8f0;
+    font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    background-image: 
+      radial-gradient(circle at 15% 15%, rgba(0, 240, 255, 0.04) 0%, transparent 40%),
+      radial-gradient(circle at 85% 85%, rgba(168, 85, 247, 0.04) 0%, transparent 40%),
+      radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.02) 0%, transparent 60%);
+    background-attachment: fixed;
+  }
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: rgba(13, 20, 36, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  border-radius: 12px;
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+/* Custom Cyber Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(5, 10, 20, 0.8);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.25);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.5);
+}
+
+/* Animations */
+@keyframes pulseViolation {
+  0%, 100% { border-color: #f43f5e; box-shadow: 0 0 10px rgba(244, 63, 94, 0.3); }
+  50% { border-color: #ff85a1; box-shadow: 0 0 20px rgba(244, 63, 94, 0.6); }
+}
+
+.animate-violation {
+  animation: pulseViolation 1.5s infinite ease-in-out;
+}
+
+@keyframes radarSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-radar {
+  animation: radarSpin 4s linear infinite;
+}

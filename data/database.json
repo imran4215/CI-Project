@@ -1,0 +1,19 @@
+{
+  "users": {
+    "7bf0222a": {
+      "id": "7bf0222a",
+      "name": "Imran",
+      "roll_id": "202314117",
+      "department": "Computer Science & Engineering",
+      "created_at": "2026-09-10T00:02:53.689887",
+      "images": {
+        "front": "faces/7bf0222a/front.jpg",
+        "left": "faces/7bf0222a/left.jpg",
+        "right": "faces/7bf0222a/right.jpg",
+        "up": "faces/7bf0222a/up.jpg",
+        "down": "faces/7bf0222a/down.jpg"
+      },
+      "angle_count": 5
+    }
+  }
+}
