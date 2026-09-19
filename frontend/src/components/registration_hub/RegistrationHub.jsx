@@ -43,6 +43,7 @@ import {
   Eye,
 } from "lucide-react";
 import { SignatureModal } from "../attendance/SignatureModal";
+import { ClassRoutineManager } from "./ClassRoutineManager";
 
 export function RegistrationHub() {
   const {
@@ -1020,6 +1021,17 @@ export function RegistrationHub() {
             }`}
           >
             <CalendarPlus className="w-4 h-4" /> 4) Exam Create & Enroll
+          </button>
+
+          <button
+            onClick={() => setSubTab("routine")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${
+              subTab === "routine"
+                ? "bg-cyan-500 text-slate-950 shadow-neon-cyan"
+                : "text-slate-400 hover:text-white hover:bg-slate-900"
+            }`}
+          >
+            <Clock className="w-4 h-4" /> 5) Class Routine
           </button>
         </div>
       </div>
@@ -3246,6 +3258,11 @@ export function RegistrationHub() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* 5. WEEKLY CLASS ROUTINE MANAGER VIEW                                     */}
+      {/* ========================================================================= */}
+      {subTab === "routine" && <ClassRoutineManager />}
     </div>
   );
 }

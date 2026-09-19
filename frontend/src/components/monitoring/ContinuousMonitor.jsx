@@ -26,7 +26,9 @@ import {
   Footprints,
   X,
   FileText,
+  GraduationCap,
 } from "lucide-react";
+import { ClassroomMonitor } from "./ClassroomMonitor";
 
 export function ContinuousMonitor() {
   const {
@@ -54,6 +56,7 @@ export function ContinuousMonitor() {
   const [faceCount, setFaceCount] = useState(0);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
+  const [surveillanceMode, setSurveillanceMode] = useState("exam"); // "exam" | "classroom"
 
   // Continuous monitoring metrics from backend
   const [monitoringData, setMonitoringData] = useState({
@@ -235,22 +238,30 @@ export function ContinuousMonitor() {
   }, [activeRoomId, threshold, isMirrored, triggerAudio, triggerVoice, voiceAlertsEnabled, absenceThresholdSec, addToast, loadAlerts]);
 
   useEffect(() => {
-    startCamera();
+    if (surveillanceMode === "exam") {
+      startCamera();
+    } else {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      setIsCameraActive(false);
+    }
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [startCamera]);
+  }, [startCamera, surveillanceMode]);
 
   useEffect(() => {
     let intervalId;
-    if (isCameraActive) {
+    if (isCameraActive && surveillanceMode === "exam") {
       // Run continuous exam surveillance at ~4 FPS
       intervalId = setInterval(processFrame, 250);
     }
     return () => clearInterval(intervalId);
-  }, [isCameraActive, processFrame]);
+  }, [isCameraActive, processFrame, surveillanceMode]);
 
   // Handle instant supervisor action on candidate (Washroom / Exit)
   const handleCandidateAction = async (candId, actionType, candName) => {
@@ -268,30 +279,75 @@ export function ContinuousMonitor() {
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* STANDBY NOTICE BANNER */}
-      {!isLiveExamActive && (
-        <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/20 backdrop-blur-md flex items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-              <Camera className="w-4 h-4" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-emerald-300 flex items-center gap-2">
-                Camera in Standby Mode (Normal Feed)
-                <span className="px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono border border-emerald-500/40">
-                  ALERTS MUTED
-                </span>
-              </span>
-              <p className="text-[11px] text-slate-300">
-                {activeSchedule
-                  ? `Next Scheduled: "${activeSchedule.course_title}" (${activeSchedule.exam_date} ${activeSchedule.start_time}). Surveillance will automatically engage 30 minutes before exam time.`
-                  : "No active exam scheduled right now. Camera functions normally with recognition only; security alarms and proxy penalties are disabled."}
-              </p>
-            </div>
-          </div>
+    <div className="flex flex-col gap-4">
+      {/* TOP SURVEILLANCE MODE SWITCHER TABS */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl backdrop-blur-md">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setSurveillanceMode("exam")}
+            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition ${
+              surveillanceMode === "exam"
+                ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-neon-cyan"
+                : "text-slate-400 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-cyan-300" />
+            Exam Hall Surveillance
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-500/30">
+              Exam Hall Monitor
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSurveillanceMode("classroom")}
+            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition ${
+              surveillanceMode === "classroom"
+                ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-neon-indigo"
+                : "text-slate-400 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <GraduationCap className="w-4 h-4 text-indigo-300" />
+            Classroom AI Surveillance
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-500/30">
+              No Card Punch
+            </span>
+          </button>
         </div>
-      )}
+
+        <div className="hidden sm:flex items-center gap-2 pr-2 text-xs text-slate-400 font-mono">
+          <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+          <span>Dual-Engine AI Surveillance System</span>
+        </div>
+      </div>
+
+      {/* RENDER ACTIVE MODE */}
+      {surveillanceMode === "classroom" ? (
+        <ClassroomMonitor />
+      ) : (
+        <div className="flex flex-col gap-5">
+          {/* STANDBY NOTICE BANNER */}
+          {!isLiveExamActive && (
+            <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/20 backdrop-blur-md flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-bold text-emerald-300 flex items-center gap-2">
+                    Camera in Standby Mode (Normal Feed)
+                    <span className="px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono border border-emerald-500/40">
+                      ALERTS MUTED
+                    </span>
+                  </span>
+                  <p className="text-[11px] text-slate-300">
+                    {activeSchedule
+                      ? `Next Scheduled: "${activeSchedule.course_title}" (${activeSchedule.exam_date} ${activeSchedule.start_time}). Surveillance will automatically engage 30 minutes before exam time.`
+                      : "No active exam scheduled right now. Camera functions normally with recognition only; security alarms and proxy penalties are disabled."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
       {/* 1. TOP SURVEILLANCE KPI BANNER */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -939,6 +995,8 @@ export function ContinuousMonitor() {
               </button>
             </div>
           </div>
+        </div>
+      )}
         </div>
       )}
     </div>

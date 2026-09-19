@@ -15,6 +15,7 @@ export function SignatureModal({
   rollId,
   registeredSignatureUrl = null,
   initialSignature = null,
+  initialMatchResult = null,
 }) {
   const { triggerAudio, triggerVoice, addToast } = useApp();
   const canvasRef = useRef(null);
@@ -23,15 +24,25 @@ export function SignatureModal({
   const lastPointRef = useRef({ x: 0, y: 0 });
 
   const [mounted, setMounted] = useState(false);
-  const [hasSignature, setHasSignature] = useState(false);
+  const [hasSignature, setHasSignature] = useState(!!initialSignature);
   const [isTabletActive, setIsTabletActive] = useState(false);
   const [livePreviewUrl, setLivePreviewUrl] = useState(initialSignature || null);
-  const [matchResult, setMatchResult] = useState(null);
+  const [matchResult, setMatchResult] = useState(initialMatchResult || null);
   const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (initialSignature) {
+      setLivePreviewUrl(initialSignature);
+      setHasSignature(true);
+    }
+    if (initialMatchResult) {
+      setMatchResult(initialMatchResult);
+    }
+  }, [initialSignature, initialMatchResult, isOpen]);
 
   const setupCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -113,8 +124,6 @@ export function SignatureModal({
     }
   };
 
-  if (!isOpen || !mounted) return null;
-
   const getCanvasCoords = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -139,6 +148,7 @@ export function SignatureModal({
     lastPointRef.current = coords;
 
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext("2d");
     ctx.beginPath();
     ctx.moveTo(coords.x, coords.y);
@@ -198,6 +208,8 @@ export function SignatureModal({
     setLivePreviewUrl(null);
     setMatchResult(null);
   };
+
+  if (!isOpen || !mounted) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[99999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
@@ -276,13 +288,21 @@ export function SignatureModal({
           )}
         </div>
 
-        {/* Live Preview Section */}
+        {/* Live Drawn Signature Preview Section */}
         <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/80 flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-slate-300 flex items-center gap-1">
-              <Eye className="w-3.5 h-3.5 text-cyber-cyan" /> Live Signature Preview
+              <Eye className="w-3.5 h-3.5 text-cyber-cyan" /> Live Drawn Signature Preview
             </span>
-            <span className="text-[10px] font-mono text-slate-500">Live Input</span>
+            {matchResult && (
+              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                matchResult.is_match && matchResult.similarity_score >= 50.0
+                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                  : "bg-rose-500/20 text-rose-400 border-rose-500/30"
+              }`}>
+                Match: {matchResult.similarity_score}% {matchResult.similarity_score >= 50.0 ? "✅ (≥50%)" : "⚠️ (<50%)"}
+              </span>
+            )}
           </div>
 
           <div className="h-24 w-full rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden p-1.5 relative">
@@ -298,12 +318,26 @@ export function SignatureModal({
           </div>
         </div>
 
-        {/* Warning banner if match < 50% after clicking accept */}
-        {registeredSignatureUrl && candidateId && matchResult && (!matchResult.is_match || matchResult.similarity_score < 50.0) && (
-          <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
-            <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-            <span>
-              <strong>Match score is {matchResult.similarity_score}% (Minimum required: 50%).</strong> Please clear pad and sign again cleanly to match your profile signature.
+        {/* Match Score Banner */}
+        {registeredSignatureUrl && candidateId && matchResult && (
+          <div className={`p-2.5 rounded-xl border text-xs flex items-center justify-between font-mono animate-in fade-in ${
+            matchResult.is_match && matchResult.similarity_score >= 50.0
+              ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300"
+              : "bg-rose-950/40 border-rose-500/40 text-rose-300"
+          }`}>
+            <div className="flex items-center gap-2">
+              {matchResult.is_match && matchResult.similarity_score >= 50.0 ? (
+                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              )}
+              <span>
+                <strong>Biometric Similarity: {matchResult.similarity_score}%</strong> (Threshold: 50% Required).
+                {matchResult.similarity_score >= 50.0 ? " Verification Passed." : " Below threshold, please re-sign."}
+              </span>
+            </div>
+            <span className="font-bold text-[11px] px-2 py-0.5 rounded bg-slate-950/80 border border-current">
+              {matchResult.similarity_score >= 50.0 ? "VERIFIED PASS" : "MISMATCH"}
             </span>
           </div>
         )}

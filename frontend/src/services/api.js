@@ -42,6 +42,21 @@ export const api = {
   deleteCourse: (deptId, courseId) => request(`/api/departments/${deptId}/courses/${courseId}`, { method: "DELETE" }),
   enrollStudentsInCourse: (deptId, courseId, studentIds) => request(`/api/departments/${deptId}/courses/${courseId}/enroll`, { method: "POST", body: JSON.stringify({ student_ids: studentIds }) }),
 
+  // Weekly Room Class Routines
+  getRoutines: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.roomId && params.roomId !== "ALL") q.append("room_id", params.roomId);
+    if (params.department && params.department !== "ALL") q.append("department", params.department);
+    if (params.day && params.day !== "ALL") q.append("day", params.day);
+    const qs = q.toString();
+    return request(`/api/routines${qs ? `?${qs}` : ""}`);
+  },
+  createRoutine: (routineData) => request("/api/routines", { method: "POST", body: JSON.stringify(routineData) }),
+  updateRoutine: (routineId, routineData) => request(`/api/routines/${routineId}`, { method: "PUT", body: JSON.stringify(routineData) }),
+  deleteRoutine: (routineId) => request(`/api/routines/${routineId}`, { method: "DELETE" }),
+  batchSaveRoutines: (routines) => request("/api/routines/batch", { method: "POST", body: JSON.stringify({ routines }) }),
+  clearRoomRoutines: (roomId, day = "") => request(`/api/routines/room/${roomId}${day ? `?day=${encodeURIComponent(day)}` : ""}`, { method: "DELETE" }),
+
   // Allocations & Admit Cards
   getAllocations: () => request("/api/allocations"),
   saveAllocation: (allocData) => request("/api/allocations", { method: "POST", body: JSON.stringify(allocData) }),
@@ -121,4 +136,17 @@ export const api = {
   getMonitoringConfig: () => request("/api/monitoring/config"),
   updateMonitoringConfig: (configData) =>
     request("/api/monitoring/config", { method: "POST", body: JSON.stringify(configData) }),
+
+  // Automated Classroom Surveillance & Live Presence Tracking
+  processClassroomFrame: (data) =>
+    request("/api/classroom/frame", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getClassroomStatus: (roomId, courseCode) =>
+    request(`/api/classroom/status?room_id=${encodeURIComponent(roomId)}&course_code=${encodeURIComponent(courseCode)}`),
+  resetClassroomSession: (roomId, courseCode) =>
+    request(`/api/classroom/reset?room_id=${encodeURIComponent(roomId)}&course_code=${encodeURIComponent(courseCode)}`, {
+      method: "POST",
+    }),
 };

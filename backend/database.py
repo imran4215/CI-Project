@@ -18,6 +18,7 @@ DEPARTMENTS_FILE = os.path.join(DATA_DIR, "departments.json")
 ALLOCATIONS_FILE = os.path.join(DATA_DIR, "allocations.json")
 ATTENDANCE_FILE = os.path.join(DATA_DIR, "attendance.json")
 ALERTS_FILE = os.path.join(DATA_DIR, "proxy_alerts.json")
+CLASS_ROUTINES_FILE = os.path.join(DATA_DIR, "class_routines.json")
 
 os.makedirs(FACES_DIR, exist_ok=True)
 os.makedirs(ATTENDANCE_DIR, exist_ok=True)
@@ -116,6 +117,138 @@ def get_default_schedules():
         }
     ]
 
+def get_default_class_routines():
+    return [
+        {
+            "id": "rt-101-sun-1",
+            "room_id": "room-101",
+            "department": "Computer Science & Engineering",
+            "day": "Sunday",
+            "time_slot": "09:00 - 09:50",
+            "start_time": "09:00",
+            "end_time": "09:50",
+            "is_gap": False,
+            "course_code": "CSE-2101",
+            "course_name": "Data Structures & Algorithms",
+            "instructor": "Dr. Tariq Rahman",
+            "section": "A",
+            "semester": "3rd",
+            "remarks": "Lecture Hall 101"
+        },
+        {
+            "id": "rt-101-sun-2",
+            "room_id": "room-101",
+            "department": "Computer Science & Engineering",
+            "day": "Sunday",
+            "time_slot": "10:00 - 10:50",
+            "start_time": "10:00",
+            "end_time": "10:50",
+            "is_gap": False,
+            "course_code": "CSE-3101",
+            "course_name": "Database Management Systems",
+            "instructor": "Prof. Mahmudul Hasan",
+            "section": "B",
+            "semester": "5th",
+            "remarks": "Lecture Hall 101"
+        },
+        {
+            "id": "rt-101-sun-3",
+            "room_id": "room-101",
+            "department": "Computer Science & Engineering",
+            "day": "Sunday",
+            "time_slot": "11:00 - 11:50",
+            "start_time": "11:00",
+            "end_time": "11:50",
+            "is_gap": False,
+            "course_code": "CSE-4101",
+            "course_name": "Artificial Intelligence & Neural Networks",
+            "instructor": "Dr. A. K. Azad",
+            "section": "A",
+            "semester": "7th",
+            "remarks": "Lecture Hall 101"
+        },
+        {
+            "id": "rt-101-sun-4",
+            "room_id": "room-101",
+            "department": "Software Engineering",
+            "day": "Sunday",
+            "time_slot": "12:00 - 12:50",
+            "start_time": "12:00",
+            "end_time": "12:50",
+            "is_gap": False,
+            "course_code": "SWE-1101",
+            "course_name": "Introduction to Software Engineering",
+            "instructor": "Farhana Sultana",
+            "section": "A",
+            "semester": "1st",
+            "remarks": "Lecture Hall 101"
+        },
+        {
+            "id": "rt-101-sun-5",
+            "room_id": "room-101",
+            "department": "ALL",
+            "day": "Sunday",
+            "time_slot": "01:00 - 01:50",
+            "start_time": "01:00",
+            "end_time": "01:50",
+            "is_gap": True,
+            "course_code": "GAP",
+            "course_name": "Lunch & Prayer Break",
+            "instructor": "",
+            "section": "",
+            "semester": "",
+            "remarks": "Break / Free Period"
+        },
+        {
+            "id": "rt-101-sun-6",
+            "room_id": "room-101",
+            "department": "Computer Science & Engineering",
+            "day": "Sunday",
+            "time_slot": "02:00 - 02:50",
+            "start_time": "02:00",
+            "end_time": "02:50",
+            "is_gap": False,
+            "course_code": "CSE-1101",
+            "course_name": "Structured Programming Language",
+            "instructor": "Tanvir Ahmed",
+            "section": "C",
+            "semester": "1st",
+            "remarks": "Lecture Hall 101"
+        },
+        {
+            "id": "rt-101-sun-7",
+            "room_id": "room-101",
+            "department": "Electrical & Electronic Engineering",
+            "day": "Sunday",
+            "time_slot": "03:00 - 03:50",
+            "start_time": "03:00",
+            "end_time": "03:50",
+            "is_gap": False,
+            "course_code": "EEE-1101",
+            "course_name": "Basic Electrical Circuit Analysis",
+            "instructor": "Engr. Rezaul Karim",
+            "section": "A",
+            "semester": "2nd",
+            "remarks": "Lecture Hall 101"
+        },
+        {
+            "id": "rt-101-sun-8",
+            "room_id": "room-101",
+            "department": "ALL",
+            "day": "Sunday",
+            "time_slot": "04:00 - 04:50",
+            "start_time": "04:00",
+            "end_time": "04:50",
+            "is_gap": True,
+            "course_code": "GAP",
+            "course_name": "Free Period / Discussion",
+            "instructor": "",
+            "section": "",
+            "semester": "",
+            "remarks": "No Class"
+        }
+    ]
+
 class FaceDatabase:
     _instance = None
 
@@ -135,7 +268,9 @@ class FaceDatabase:
         self.allocations_file = ALLOCATIONS_FILE
         self.attendance_file = ATTENDANCE_FILE
         self.alerts_file = ALERTS_FILE
+        self.class_routines_file = CLASS_ROUTINES_FILE
         self.monitoring_sessions = {}
+        self.classroom_sessions = {}
         self.monitoring_config = {
             "absence_threshold_sec": 45,
             "gate_arrival_threshold_sec": 300,
@@ -238,9 +373,25 @@ class FaceDatabase:
             self.departments = DEFAULT_DEPARTMENTS
             self._save_departments()
 
+        # 8. Load class routines
+        if os.path.exists(self.class_routines_file):
+            try:
+                with open(self.class_routines_file, "r", encoding="utf-8") as f:
+                    self.class_routines = json.load(f)
+            except Exception:
+                self.class_routines = get_default_class_routines()
+                self._save_class_routines()
+        else:
+            self.class_routines = get_default_class_routines()
+            self._save_class_routines()
+
     def _save(self):
         with open(self.db_file, "w", encoding="utf-8") as f:
             json.dump(self.db, f, indent=2, ensure_ascii=False)
+
+    def _save_class_routines(self):
+        with open(self.class_routines_file, "w", encoding="utf-8") as f:
+            json.dump(self.class_routines, f, indent=2, ensure_ascii=False)
 
     def _save_rooms(self):
         with open(self.rooms_file, "w", encoding="utf-8") as f:
@@ -738,6 +889,124 @@ class FaceDatabase:
                         self._save_departments()
                         return c
         return None
+
+    # -------------------------------------------------------------
+    # 3.6 Weekly Room Class Routines Management
+    # -------------------------------------------------------------
+    def get_class_routines(
+        self,
+        room_id: Optional[str] = None,
+        department: Optional[str] = None,
+        day: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        results = self.class_routines
+        if room_id and room_id != "ALL":
+            results = [r for r in results if r.get("room_id") == room_id]
+        if department and department != "ALL":
+            results = [r for r in results if r.get("department") == department or r.get("department") == "ALL"]
+        if day and day != "ALL":
+            results = [r for r in results if r.get("day", "").lower() == day.lower()]
+        return results
+
+    def add_class_routine(
+        self,
+        room_id: str,
+        department: str,
+        day: str,
+        time_slot: str,
+        start_time: str = "",
+        end_time: str = "",
+        is_gap: bool = False,
+        course_code: str = "",
+        course_name: str = "",
+        instructor: str = "",
+        section: str = "",
+        semester: str = "",
+        remarks: str = ""
+    ) -> Dict[str, Any]:
+        if (not start_time or not end_time) and "-" in time_slot:
+            parts = time_slot.split("-")
+            if not start_time:
+                start_time = parts[0].strip()
+            if not end_time:
+                end_time = parts[1].strip()
+
+        routine_id = f"rt-{str(uuid.uuid4())[:8]}"
+        new_entry = {
+            "id": routine_id,
+            "room_id": room_id.strip(),
+            "department": department.strip(),
+            "day": day.strip(),
+            "time_slot": time_slot.strip(),
+            "start_time": start_time.strip(),
+            "end_time": end_time.strip(),
+            "is_gap": bool(is_gap),
+            "course_code": (course_code or ("GAP" if is_gap else "CRS-101")).strip(),
+            "course_name": (course_name or ("Break / Free Slot" if is_gap else "Class Lecture")).strip(),
+            "instructor": instructor.strip(),
+            "section": section.strip(),
+            "semester": semester.strip(),
+            "remarks": remarks.strip(),
+            "updated_at": datetime.now().isoformat()
+        }
+
+        # If a routine already exists for this exact room, day, and time_slot -> update in place
+        existing_idx = next(
+            (i for i, r in enumerate(self.class_routines)
+             if r.get("room_id") == room_id and r.get("day", "").lower() == day.lower() and r.get("time_slot") == time_slot),
+            None
+        )
+        if existing_idx is not None:
+            new_entry["id"] = self.class_routines[existing_idx]["id"]
+            self.class_routines[existing_idx] = new_entry
+        else:
+            self.class_routines.append(new_entry)
+
+        self._save_class_routines()
+        return new_entry
+
+    def update_class_routine(self, routine_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        for r in self.class_routines:
+            if r["id"] == routine_id:
+                for k, v in updates.items():
+                    r[k] = v
+                r["updated_at"] = datetime.now().isoformat()
+                self._save_class_routines()
+                return r
+        return None
+
+    def delete_class_routine(self, routine_id: str) -> bool:
+        self.class_routines = [r for r in self.class_routines if r["id"] != routine_id]
+        self._save_class_routines()
+        return True
+
+    def batch_save_class_routines(self, routines_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        for item in routines_list:
+            r_id = item.get("id")
+            if r_id:
+                existing = next((r for r in self.class_routines if r["id"] == r_id), None)
+                if existing:
+                    existing.update(item)
+                    existing["updated_at"] = datetime.now().isoformat()
+                else:
+                    self.class_routines.append(item)
+            else:
+                item["id"] = f"rt-{str(uuid.uuid4())[:8]}"
+                item["updated_at"] = datetime.now().isoformat()
+                self.class_routines.append(item)
+        self._save_class_routines()
+        return self.class_routines
+
+    def clear_room_routines(self, room_id: str, day: Optional[str] = None) -> bool:
+        if day and day != "ALL":
+            self.class_routines = [
+                r for r in self.class_routines
+                if not (r.get("room_id") == room_id and r.get("day", "").lower() == day.lower())
+            ]
+        else:
+            self.class_routines = [r for r in self.class_routines if r.get("room_id") != room_id]
+        self._save_class_routines()
+        return True
 
     def get_active_schedule_for_room(self, room_id: str, now_dt: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
         if not now_dt:
@@ -2179,6 +2448,253 @@ class FaceDatabase:
             }
 
         return self.update_continuous_presence(active_room_id=active_room_id, detected_faces=[])
+
+    # =============================================================
+    # 8. Classroom Surveillance & Live Course Attendance Tracking
+    # =============================================================
+    def update_classroom_surveillance(
+        self,
+        room_id: str,
+        department: str,
+        course_code: str,
+        course_name: str,
+        detected_faces: List[Dict[str, Any]],
+        absence_threshold_sec: int = 45,
+        day: Optional[str] = None,
+        time_slot: Optional[str] = None
+    ) -> Dict[str, Any]:
+        now = datetime.now()
+        now_iso = now.isoformat()
+        now_time = now.strftime("%I:%M:%S %p")
+        day_key = self._get_today_key()
+
+        sess_key = f"class_{room_id}_{course_code}_{day_key}"
+        if sess_key not in self.classroom_sessions:
+            self.classroom_sessions[sess_key] = {
+                "room_id": room_id,
+                "department": department,
+                "course_code": course_code,
+                "course_name": course_name,
+                "day": day or "Sunday",
+                "time_slot": time_slot or "09:00 - 09:50",
+                "created_at": now_iso,
+                "candidates": {},
+                "event_logs": []
+            }
+
+        sess = self.classroom_sessions[sess_key]
+
+        # 1. Resolve enrolled candidates for this specific course
+        enrolled_ids = []
+        for d in self.departments:
+            if d.get("name") == department or department == "ALL":
+                for c in d.get("courses", []):
+                    if c.get("code") == course_code:
+                        enrolled_ids = c.get("enrolled_student_ids", [])
+                        break
+
+        # If no explicit enrollment list, fallback to all users in the department
+        if not enrolled_ids:
+            all_users = self.get_users()
+            enrolled_ids = [
+                u["id"] for u in all_users
+                if (u.get("department") == department or department == "ALL")
+            ]
+
+        # Initialize candidates in session if not yet present
+        for u_id in enrolled_ids:
+            user_obj = self.get_user(u_id)
+            if not user_obj:
+                continue
+            if u_id not in sess["candidates"]:
+                sess["candidates"][u_id] = {
+                    "id": u_id,
+                    "name": user_obj.get("name", "Student"),
+                    "roll_id": user_obj.get("roll_id", "N/A"),
+                    "department": user_obj.get("department", department),
+                    "status": "ABSENT",  # "PRESENT", "STEPPED_OUT", "ABSENT"
+                    "first_detected_at": None,
+                    "first_detected_time": None,
+                    "last_seen_at": None,
+                    "last_seen_time": None,
+                    "last_seen_timestamp": 0,
+                    "in_class_seconds": 0,
+                    "stepped_out_at": None,
+                    "stepped_out_time": None,
+                    "stepped_out_duration_sec": 0,
+                    "movement_history": []
+                }
+
+        # 2. Process detected faces in this frame
+        new_events = []
+        seen_user_ids = set()
+        guest_faces = []
+
+        for face in detected_faces:
+            if face.get("is_recognized") and face.get("user_id"):
+                u_id = face["user_id"]
+                seen_user_ids.add(u_id)
+
+                if u_id in sess["candidates"]:
+                    c_data = sess["candidates"][u_id]
+                    old_status = c_data["status"]
+
+                    # If first time detected in this class session -> Mark Attendance
+                    if not c_data["first_detected_at"]:
+                        c_data["first_detected_at"] = now_iso
+                        c_data["first_detected_time"] = now_time
+                        ev = {
+                            "id": f"ev-{uuid.uuid4().hex[:8]}",
+                            "candidate_id": u_id,
+                            "name": c_data["name"],
+                            "event": "CLASS_ENTRY",
+                            "time": now_time,
+                            "timestamp": now_iso,
+                            "label": f"{c_data['name']} entered classroom (Attendance Auto-Marked)",
+                            "type": "entry"
+                        }
+                        c_data["movement_history"].append(ev)
+                        sess["event_logs"].insert(0, ev)
+                        new_events.append(ev)
+
+                    # If returning from stepped out
+                    elif old_status == "STEPPED_OUT":
+                        ev = {
+                            "id": f"ev-{uuid.uuid4().hex[:8]}",
+                            "candidate_id": u_id,
+                            "name": c_data["name"],
+                            "event": "RETURNED",
+                            "time": now_time,
+                            "timestamp": now_iso,
+                            "label": f"{c_data['name']} returned to class seat (Absent for {c_data.get('stepped_out_duration_sec', 0)}s)",
+                            "type": "return"
+                        }
+                        c_data["movement_history"].append(ev)
+                        sess["event_logs"].insert(0, ev)
+                        new_events.append(ev)
+
+                    c_data["status"] = "PRESENT"
+                    c_data["last_seen_at"] = now_iso
+                    c_data["last_seen_time"] = now_time
+                    c_data["last_seen_timestamp"] = now.timestamp()
+                    c_data["stepped_out_at"] = None
+                    c_data["stepped_out_duration_sec"] = 0
+                    c_data["in_class_seconds"] = int(now.timestamp() - datetime.fromisoformat(c_data["first_detected_at"]).timestamp()) if c_data["first_detected_at"] else 0
+
+                    face["classroom_status"] = "PRESENT"
+                    face["is_enrolled"] = True
+                else:
+                    other_u = self.get_user(u_id)
+                    cand_name = other_u.get("name", "Guest Student") if other_u else "Guest Student"
+                    face["classroom_status"] = "GUEST_STUDENT"
+                    face["is_enrolled"] = False
+                    guest_faces.append({"user_id": u_id, "name": cand_name, "status": "GUEST"})
+            else:
+                face["classroom_status"] = "UNKNOWN"
+                face["is_enrolled"] = False
+
+        # 3. Check for students who stepped out (absent from camera > threshold)
+        for u_id, c_data in sess["candidates"].items():
+            if u_id not in seen_user_ids:
+                if c_data["first_detected_at"]:
+                    last_seen_ts = c_data.get("last_seen_timestamp", 0)
+                    elapsed = now.timestamp() - last_seen_ts
+
+                    if elapsed >= absence_threshold_sec:
+                        if c_data["status"] == "PRESENT":
+                            c_data["status"] = "STEPPED_OUT"
+                            c_data["stepped_out_at"] = now_iso
+                            c_data["stepped_out_time"] = now_time
+                            ev = {
+                                "id": f"ev-{uuid.uuid4().hex[:8]}",
+                                "candidate_id": u_id,
+                                "name": c_data["name"],
+                                "event": "STEPPED_OUT",
+                                "time": now_time,
+                                "timestamp": now_iso,
+                                "label": f"{c_data['name']} stepped out / left classroom view ({int(elapsed)}s)",
+                                "type": "out"
+                            }
+                            c_data["movement_history"].append(ev)
+                            sess["event_logs"].insert(0, ev)
+                            new_events.append(ev)
+
+                        c_data["stepped_out_duration_sec"] = int(elapsed)
+
+        # 4. Summarize session
+        present_count = sum(1 for c in sess["candidates"].values() if c["status"] == "PRESENT")
+        stepped_out_count = sum(1 for c in sess["candidates"].values() if c["status"] == "STEPPED_OUT")
+        absent_count = sum(1 for c in sess["candidates"].values() if c["status"] == "ABSENT")
+
+        roster = list(sess["candidates"].values())
+        status_rank = {"PRESENT": 0, "STEPPED_OUT": 1, "ABSENT": 2}
+        roster.sort(key=lambda x: (status_rank.get(x["status"], 3), x.get("name", "")))
+
+        # Keep event logs capped at 100
+        sess["event_logs"] = sess["event_logs"][:100]
+
+        return {
+            "success": True,
+            "session_key": sess_key,
+            "room_id": room_id,
+            "department": department,
+            "course_code": course_code,
+            "course_name": course_name,
+            "time_slot": time_slot or "09:00 - 09:50",
+            "total_enrolled": len(sess["candidates"]),
+            "present_count": present_count,
+            "stepped_out_count": stepped_out_count,
+            "absent_count": absent_count,
+            "guest_count": len(guest_faces),
+            "unregistered_faces_in_frame": sum(1 for f in detected_faces if not f.get("is_recognized")),
+            "roster": roster,
+            "event_logs": sess["event_logs"],
+            "new_events": new_events,
+            "guest_faces": guest_faces
+        }
+
+    def get_classroom_session_status(self, room_id: str, course_code: str) -> Dict[str, Any]:
+        day_key = self._get_today_key()
+        sess_key = f"class_{room_id}_{course_code}_{day_key}"
+        if sess_key not in self.classroom_sessions:
+            return {
+                "success": True,
+                "is_active": False,
+                "room_id": room_id,
+                "course_code": course_code,
+                "total_enrolled": 0,
+                "present_count": 0,
+                "stepped_out_count": 0,
+                "absent_count": 0,
+                "roster": [],
+                "event_logs": []
+            }
+        sess = self.classroom_sessions[sess_key]
+        roster = list(sess["candidates"].values())
+        status_rank = {"PRESENT": 0, "STEPPED_OUT": 1, "ABSENT": 2}
+        roster.sort(key=lambda x: (status_rank.get(x["status"], 3), x.get("name", "")))
+        return {
+            "success": True,
+            "is_active": True,
+            "room_id": room_id,
+            "department": sess.get("department", ""),
+            "course_code": course_code,
+            "course_name": sess.get("course_name", ""),
+            "time_slot": sess.get("time_slot", ""),
+            "total_enrolled": len(sess["candidates"]),
+            "present_count": sum(1 for c in roster if c["status"] == "PRESENT"),
+            "stepped_out_count": sum(1 for c in roster if c["status"] == "STEPPED_OUT"),
+            "absent_count": sum(1 for c in roster if c["status"] == "ABSENT"),
+            "roster": roster,
+            "event_logs": sess.get("event_logs", [])
+        }
+
+    def reset_classroom_session(self, room_id: str, course_code: str) -> bool:
+        day_key = self._get_today_key()
+        sess_key = f"class_{room_id}_{course_code}_{day_key}"
+        if sess_key in self.classroom_sessions:
+            del self.classroom_sessions[sess_key]
+        return True
 
 db = FaceDatabase()
 

@@ -79,7 +79,8 @@ export function CandidateCard({
   });
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
 
-  const lastProcessedRfidEpoch = useRef(Date.now() / 1000);
+  const lastProcessedScanId = useRef(0);
+  const rfidInputRef = useRef(null);
 
   // Active candidate: use locked candidate once face is confirmed, otherwise live detected candidate
   const activeCandidate = isFaceStepPassed && lockedCandidate ? lockedCandidate : detectedCandidate;
@@ -94,7 +95,7 @@ export function CandidateCard({
     setManualRfidInput("");
     setSignatureData({ hasSignature: false, dataUrl: null, matchResult: null, isOverridden: false });
     setIsSignatureModalOpen(false);
-    lastProcessedRfidEpoch.current = Date.now() / 1000;
+    lastProcessedScanId.current = 0;
     api.clearLatestRFID().catch(() => {});
     onLockScanner?.(false);
     onResetScanner?.();
@@ -112,10 +113,17 @@ export function CandidateCard({
     setManualRfidInput("");
     setSignatureData({ hasSignature: false, dataUrl: null, matchResult: null, isOverridden: false });
     setIsSignatureModalOpen(false);
-    lastProcessedRfidEpoch.current = Date.now() / 1000;
+    lastProcessedScanId.current = 0;
     api.clearLatestRFID().catch(() => {});
     onLockScanner?.(false);
   }, [activeRoomId, onLockScanner]);
+
+  // Auto-focus manual RFID input when reaching Step 3
+  useEffect(() => {
+    if (isFaceStepPassed && (isSignatureStepPassed || signatureData.isOverridden) && !isRfidStepPassed) {
+      setTimeout(() => rfidInputRef.current?.focus(), 100);
+    }
+  }, [isFaceStepPassed, isSignatureStepPassed, signatureData.isOverridden, isRfidStepPassed]);
 
   // Handle Step 1: Confirm Face (Manual user click / Enter)
   const handleConfirmFace = useCallback(() => {
@@ -130,7 +138,7 @@ export function CandidateCard({
     setIsSignatureStepPassed(false);
     setIsRfidStepPassed(false);
     setScannedRfidTag("");
-    lastProcessedRfidEpoch.current = Date.now() / 1000;
+    lastProcessedScanId.current = 0;
     api.clearLatestRFID().catch(() => {});
     onLockScanner?.(true);
 
@@ -159,8 +167,7 @@ export function CandidateCard({
         setIsSignatureStepPassed(true);
         setIsRfidStepPassed(false);
         setScannedRfidTag("");
-        // Reset RFID epoch to NOW so only cards tapped after this moment are processed
-        lastProcessedRfidEpoch.current = Date.now() / 1000;
+        lastProcessedScanId.current = 0;
         api.clearLatestRFID().catch(() => {});
 
         triggerAudio("success");
@@ -244,7 +251,7 @@ export function CandidateCard({
         const res = await api.getLatestRFID();
         setIsRfidHardwareConnected(!!res.is_connected);
 
-        // Only process live RFID hardware scan if we are on Step 3 (Face & Signature passed, RFID pending)
+        // Process live RFID scan when on Step 3
         if (
           isFaceStepPassed &&
           (isSignatureStepPassed || signatureData.isOverridden) &&
@@ -252,17 +259,52 @@ export function CandidateCard({
           res &&
           res.scanned &&
           res.scan &&
-          res.scan.epoch > lastProcessedRfidEpoch.current
+          res.scan.tag
         ) {
-          lastProcessedRfidEpoch.current = res.scan.epoch;
-          handleRfidScanned(res.scan.tag);
+          const scanId = res.scan.scan_id || res.scan.epoch;
+          if (scanId && scanId !== lastProcessedScanId.current) {
+            lastProcessedScanId.current = scanId;
+            handleRfidScanned(res.scan.tag);
+            api.clearLatestRFID().catch(() => {});
+          }
         }
       } catch (e) {
         // silent polling catch
       }
-    }, 750);
+    }, 350); // Fast 350ms polling for instant response
 
     return () => clearInterval(intervalId);
+  }, [isFaceStepPassed, isSignatureStepPassed, isRfidStepPassed, signatureData.isOverridden, handleRfidScanned]);
+
+  // Capture USB Keyboard-Wedge RFID Scanners globally
+  useEffect(() => {
+    let keyBuffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleGlobalKeyDown = (e) => {
+      if (!isFaceStepPassed || (!isSignatureStepPassed && !signatureData.isOverridden) || isRfidStepPassed) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastKeyTime > 350) {
+        keyBuffer = "";
+      }
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        if (keyBuffer.length >= 6) {
+          e.preventDefault();
+          handleRfidScanned(keyBuffer);
+          keyBuffer = "";
+        }
+      } else if (e.key.length === 1 && /[0-9a-zA-Z]/.test(e.key)) {
+        keyBuffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [isFaceStepPassed, isSignatureStepPassed, isRfidStepPassed, signatureData.isOverridden, handleRfidScanned]);
 
   // Execute Attendance Action (ENTRY, WASHROOM_OUT, WASHROOM_IN, EXIT)
@@ -794,15 +836,23 @@ export function CandidateCard({
                 <span className="truncate">1. {isFaceStepPassed ? "Face OK" : "Face Detect"}</span>
               </div>
 
-              {/* Step 2 Badge: Digital Signature */}
-              <div
+              {/* Step 2 Badge: Digital Signature (Clickable to Re-Sign or View Match %) */}
+              <button
+                type="button"
+                disabled={!isFaceStepPassed}
+                onClick={() => {
+                  if (isFaceStepPassed) {
+                    setIsSignatureModalOpen(true);
+                  }
+                }}
                 className={`flex items-center justify-center gap-1 p-1.5 rounded-lg border transition ${
                   isSignatureStepPassed || signatureData.isOverridden
-                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold hover:bg-emerald-500/25 cursor-pointer"
                     : isFaceStepPassed
-                    ? "bg-amber-500/15 border-amber-500/40 text-amber-300 font-bold animate-pulse"
-                    : "bg-slate-900 border-slate-800 text-slate-500"
+                    ? "bg-amber-500/15 border-amber-500/40 text-amber-300 font-bold animate-pulse hover:bg-amber-500/25 cursor-pointer"
+                    : "bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed"
                 }`}
+                title={isFaceStepPassed ? "Click to View / Re-Sign Signature" : "Requires Step 1"}
               >
                 {isSignatureStepPassed || signatureData.isOverridden ? (
                   <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
@@ -812,7 +862,7 @@ export function CandidateCard({
                 <span className="truncate">
                   2. {isSignatureStepPassed || signatureData.isOverridden ? "Sign OK" : "Take Sign"}
                 </span>
-              </div>
+              </button>
 
               {/* Step 3 Badge: RFID ID Card */}
               <div
@@ -928,7 +978,7 @@ export function CandidateCard({
 
             {/* STEP 3 UI: Face & Signature passed, waiting for RFID Smart ID Card scan */}
             {isFaceStepPassed && (isSignatureStepPassed || signatureData.isOverridden) && !isRfidStepPassed && (
-              <div className="p-3.5 rounded-xl bg-slate-900/95 border-2 border-sky-500/40 flex flex-col gap-2.5 shadow-lg animate-in fade-in">
+              <div className="p-3.5 rounded-xl bg-slate-900/95 border-2 border-sky-500/40 flex flex-col gap-3 shadow-lg animate-in fade-in">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
                     <CreditCard className="w-4 h-4 text-cyan-400 animate-pulse" />
@@ -943,8 +993,41 @@ export function CandidateCard({
                   Tap student ID card on the RFID reader. Card holder must match candidate <strong>{name}</strong>.
                 </p>
 
+                {/* Signature Match Summary & Re-Sign Option */}
+                {signatureData.hasSignature && (
+                  <div className="p-2.5 rounded-xl bg-slate-950/90 border border-emerald-500/30 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-12 h-8 rounded bg-slate-900 border border-emerald-500/40 flex items-center justify-center p-0.5 overflow-hidden flex-shrink-0">
+                        <img
+                          src={signatureData.dataUrl}
+                          alt="Signature"
+                          className="w-full h-full object-contain filter brightness-125"
+                        />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[11px] font-bold text-emerald-300 truncate">
+                          Signature: {signatureData.isOverridden ? "Override Approved" : `${signatureData.matchResult?.similarity_score || 100}% Match`}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {signatureData.matchResult?.similarity_score >= 50.0 || signatureData.isOverridden ? "Verified ≥ 50%" : "Mismatch"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsSignatureModalOpen(true)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border border-slate-700 text-[11px] font-mono font-bold flex items-center gap-1 transition cursor-pointer flex-shrink-0 shadow-sm"
+                      title="Click to view signature comparison and re-sign"
+                    >
+                      <PenTool className="w-3 h-3 text-cyan-400" /> Re-Sign
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex gap-1.5">
                   <input
+                    ref={rfidInputRef}
                     type="text"
                     placeholder="Tap card on reader or enter tag..."
                     value={manualRfidInput}
@@ -1075,6 +1158,7 @@ export function CandidateCard({
         rollId={rollId}
         registeredSignatureUrl={activeCandidate?.registeredSignature || activeCandidate?.registered_signature || detectedCandidate?.registered_signature || detectedCandidate?.registeredSignature}
         initialSignature={signatureData.dataUrl}
+        initialMatchResult={signatureData.matchResult}
         onAcceptSignature={handleAcceptSignature}
       />
     </div>

@@ -154,6 +154,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const [departments, setDepartments] = useState([]);
+  const [routines, setRoutines] = useState([]);
 
   // Load Departments & Courses
   const loadDepartments = useCallback(async () => {
@@ -165,11 +166,24 @@ export function AppProvider({ children }) {
     }
   }, []);
 
+  // Load Class Routines
+  const loadRoutines = useCallback(async (params = {}) => {
+    try {
+      const data = await api.getRoutines(params);
+      setRoutines(data.routines || []);
+      return data.routines || [];
+    } catch (e) {
+      console.error("Error loading routines:", e);
+      return [];
+    }
+  }, []);
+
   // Initial Boot
   useEffect(() => {
     loadRooms();
     loadSchedules();
     loadDepartments();
+    loadRoutines();
     loadAllocations();
     loadUsers();
     loadAlerts();
@@ -338,6 +352,9 @@ export function AppProvider({ children }) {
         departments,
         setDepartments,
         loadDepartments,
+        routines,
+        setRoutines,
+        loadRoutines,
         loadRooms,
         loadSchedules,
         loadAllocations,

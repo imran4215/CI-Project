@@ -27,6 +27,7 @@ class RFIDEngine:
         self.recent_scans: List[Dict[str, Any]] = []
         self.last_seen_tag = ""
         self.last_seen_time = 0.0
+        self.scan_counter = 0
 
         # Start background serial worker
         self.start()
@@ -118,7 +119,9 @@ class RFIDEngine:
 
     def _record_scan(self, tag: str, source: str = "hardware") -> Dict[str, Any]:
         now = datetime.now()
+        self.scan_counter += 1
         scan_event = {
+            "scan_id": self.scan_counter,
             "tag": tag.strip(),
             "timestamp": now.strftime("%I:%M:%S %p"),
             "iso": now.isoformat(),
@@ -131,7 +134,7 @@ class RFIDEngine:
         if len(self.recent_scans) > 20:
             self.recent_scans = self.recent_scans[:20]
 
-        print(f"[+] [RFID] Scanned Tag: {tag} (Source: {source}) at {scan_event['timestamp']}")
+        print(f"[+] [RFID] Scanned Tag: {tag} (Source: {source}, ID: {self.scan_counter}) at {scan_event['timestamp']}")
         return scan_event
 
     def manual_scan(self, tag: str) -> Dict[str, Any]:
@@ -157,16 +160,29 @@ class RFIDEngine:
         self.latest_scan = None
 
     def _serial_worker(self):
-        """Background thread connecting and reading from serial port."""
+        """Background thread connecting and reading from serial port with auto-fallback."""
         while self.is_running:
             if self.serial_conn is None or not self.serial_conn.is_open:
-                try:
-                    self.serial_conn = serial.Serial(self.com_port, self.baud_rate, timeout=1)
-                    time.sleep(1.5) # Allow Arduino reset stabilization
-                    print(f"[+] [RFID Engine] Connected to hardware RFID reader on {self.com_port} ({self.baud_rate} baud)")
-                except Exception as e:
-                    # Serial port not available; wait and retry quietly
-                    self.serial_conn = None
+                # Try preferred port first
+                target_ports = [self.com_port]
+                for p in serial.tools.list_ports.comports():
+                    if p.device not in target_ports:
+                        target_ports.append(p.device)
+
+                connected = False
+                for port_name in target_ports:
+                    try:
+                        self.serial_conn = serial.Serial(port_name, self.baud_rate, timeout=1)
+                        time.sleep(1.2)  # Allow Arduino reset stabilization
+                        self.com_port = port_name
+                        print(f"[+] [RFID Engine] Connected to hardware RFID reader on {port_name} ({self.baud_rate} baud)")
+                        connected = True
+                        break
+                    except Exception:
+                        self.serial_conn = None
+                        continue
+
+                if not connected:
                     time.sleep(2.0)
                     continue
 
@@ -177,13 +193,13 @@ class RFIDEngine:
                         tag = self._parse_serial_line(raw_line)
                         if tag:
                             now_t = time.time()
-                            # Debounce rapid scans of same card within 1.0s
-                            if tag != self.last_seen_tag or (now_t - self.last_seen_time) > 1.0:
+                            # Debounce rapid scans of same card within 0.8s
+                            if tag != self.last_seen_tag or (now_t - self.last_seen_time) > 0.8:
                                 self.last_seen_tag = tag
                                 self.last_seen_time = now_t
                                 self._record_scan(tag, source="hardware")
                 else:
-                    time.sleep(0.05)
+                    time.sleep(0.04)
             except Exception as e:
                 print(f"[!] [RFID Engine] Serial read error on {self.com_port}: {e}")
                 if self.serial_conn:

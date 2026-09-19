@@ -199,9 +199,53 @@ class UpdateCourseRequest(BaseModel):
 class EnrollCourseRequest(BaseModel):
     student_ids: List[str] = []
 
+class CreateClassRoutineRequest(BaseModel):
+    room_id: str
+    department: str
+    day: str
+    time_slot: str
+    start_time: Optional[str] = ""
+    end_time: Optional[str] = ""
+    is_gap: Optional[bool] = False
+    course_code: Optional[str] = ""
+    course_name: Optional[str] = ""
+    instructor: Optional[str] = ""
+    section: Optional[str] = ""
+    semester: Optional[str] = ""
+    remarks: Optional[str] = ""
+
+class UpdateClassRoutineRequest(BaseModel):
+    room_id: Optional[str] = None
+    department: Optional[str] = None
+    day: Optional[str] = None
+    time_slot: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    is_gap: Optional[bool] = None
+    course_code: Optional[str] = None
+    course_name: Optional[str] = None
+    instructor: Optional[str] = None
+    section: Optional[str] = None
+    semester: Optional[str] = None
+    remarks: Optional[str] = None
+
+class BatchClassRoutineRequest(BaseModel):
+    routines: List[Dict[str, Any]]
+
 class MonitoringFrameRequest(BaseModel):
     image: str
     active_room_id: Optional[str] = None
+    threshold: Optional[float] = 0.363
+
+class ClassroomFrameRequest(BaseModel):
+    image: str
+    room_id: str
+    department: Optional[str] = "Computer Science & Engineering (CSE)"
+    course_code: str
+    course_name: Optional[str] = "Class"
+    day: Optional[str] = None
+    time_slot: Optional[str] = None
+    absence_threshold_sec: Optional[int] = 45
     threshold: Optional[float] = 0.363
 
 class UpdateMonitoringConfigRequest(BaseModel):
@@ -759,6 +803,60 @@ async def enroll_students(dept_id: str, course_id: str, req: EnrollCourseRequest
     return {"success": True, "course": course}
 
 # =============================================================================
+# 3.6. Weekly Room Class Routines
+# =============================================================================
+@app.get("/api/routines")
+async def get_routines(
+    room_id: Optional[str] = None,
+    department: Optional[str] = None,
+    day: Optional[str] = None
+):
+    routines = db.get_class_routines(room_id=room_id, department=department, day=day)
+    return {"routines": routines, "total": len(routines)}
+
+@app.post("/api/routines")
+async def create_routine(req: CreateClassRoutineRequest):
+    routine = db.add_class_routine(
+        room_id=req.room_id,
+        department=req.department,
+        day=req.day,
+        time_slot=req.time_slot,
+        start_time=req.start_time or "",
+        end_time=req.end_time or "",
+        is_gap=bool(req.is_gap),
+        course_code=req.course_code or "",
+        course_name=req.course_name or "",
+        instructor=req.instructor or "",
+        section=req.section or "",
+        semester=req.semester or "",
+        remarks=req.remarks or ""
+    )
+    return {"success": True, "routine": routine}
+
+@app.put("/api/routines/{routine_id}")
+async def update_routine(routine_id: str, req: UpdateClassRoutineRequest):
+    updates = {k: v for k, v in req.dict().items() if v is not None}
+    routine = db.update_class_routine(routine_id, updates)
+    if not routine:
+        raise HTTPException(status_code=404, detail="Routine slot not found")
+    return {"success": True, "routine": routine}
+
+@app.delete("/api/routines/{routine_id}")
+async def delete_routine(routine_id: str):
+    db.delete_class_routine(routine_id)
+    return {"success": True, "message": "Routine slot deleted successfully"}
+
+@app.post("/api/routines/batch")
+async def batch_save_routines(req: BatchClassRoutineRequest):
+    routines = db.batch_save_class_routines(req.routines)
+    return {"success": True, "routines": routines, "total": len(routines)}
+
+@app.delete("/api/routines/room/{room_id}")
+async def clear_room_routines(room_id: str, day: Optional[str] = None):
+    db.clear_room_routines(room_id, day=day)
+    return {"success": True, "message": f"Routines cleared for room {room_id}"}
+
+# =============================================================================
 # 4. Seating Allocation & Admit Card Clearance
 # =============================================================================
 @app.get("/api/allocations")
@@ -1063,6 +1161,45 @@ async def update_monitoring_config(req: UpdateMonitoringConfigRequest):
         return {"success": True, "config": cfg}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update config: {str(e)}")
+
+# =============================================================================
+# 8. Classroom Surveillance & Live Class Attendance Monitoring
+# =============================================================================
+@app.post("/api/classroom/frame")
+async def process_classroom_frame(req: ClassroomFrameRequest):
+    img = decode_base64_image(req.image)
+    if img is None:
+        raise HTTPException(status_code=400, detail="Invalid image data")
+
+    results = engine.recognize_frame(img, threshold=req.threshold, score_threshold=0.42)
+
+    presence_summary = db.update_classroom_surveillance(
+        room_id=req.room_id,
+        department=req.department or "ALL",
+        course_code=req.course_code,
+        course_name=req.course_name or req.course_code,
+        detected_faces=results,
+        absence_threshold_sec=req.absence_threshold_sec or 45,
+        day=req.day,
+        time_slot=req.time_slot
+    )
+
+    return {
+        "success": True,
+        "faces_count": len(results),
+        "faces": results,
+        "classroom": presence_summary
+    }
+
+@app.get("/api/classroom/status")
+async def get_classroom_status(room_id: str = Query(...), course_code: str = Query(...)):
+    status_data = db.get_classroom_session_status(room_id=room_id, course_code=course_code)
+    return status_data
+
+@app.post("/api/classroom/reset")
+async def reset_classroom_session(room_id: str = Query(...), course_code: str = Query(...)):
+    success = db.reset_classroom_session(room_id=room_id, course_code=course_code)
+    return {"success": success, "message": "Classroom session reset successfully"}
 
 # Root endpoint
 @app.get("/")
