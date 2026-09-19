@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useApp } from "../context/AppContext";
 import { Header } from "../components/layout/Header";
 import { NavTabs } from "../components/layout/NavTabs";
@@ -21,6 +21,7 @@ export default function Home() {
   const {
     activeTab,
     users,
+    activeRoomId,
     triggerVoice,
     triggerAudio,
     isLiveExamActive,
@@ -29,6 +30,12 @@ export default function Home() {
   const [detectedCandidate, setDetectedCandidate] = useState(null);
   const [recentPunches, setRecentPunches] = useState([]);
   const [isScannerLocked, setIsScannerLocked] = useState(false);
+
+  // Reset scanner lock and candidate state whenever the exam room is switched
+  useEffect(() => {
+    setIsScannerLocked(false);
+    setDetectedCandidate(null);
+  }, [activeRoomId]);
 
   // Callback when scanner detects faces in video frame
   const handleCandidateDetected = useCallback(
@@ -107,6 +114,8 @@ export default function Home() {
         attendanceRecord: primary.attendance_record,
         liveSnapshot: liveSnapshotB64,
         registeredPhoto: regPhotoPath ? `/api/${regPhotoPath}` : null,
+        registeredSignature: primary.registered_signature || (user?.signature ? `/api/${user.signature}` : null),
+        registered_signature: primary.registered_signature || (user?.signature ? `/api/${user.signature}` : null),
       };
 
       setDetectedCandidate(candidateObj);

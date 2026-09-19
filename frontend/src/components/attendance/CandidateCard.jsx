@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useApp } from "../../context/AppContext";
 import { api } from "../../services/api";
 import { SignatureModal } from "./SignatureModal";
@@ -25,6 +25,11 @@ import {
   PenTool,
   RotateCcw,
   Sparkles,
+  Tablet,
+  Check,
+  X,
+  Radio,
+  CreditCard,
 } from "lucide-react";
 
 export function CandidateCard({
@@ -40,6 +45,7 @@ export function CandidateCard({
     examName,
     activeSchedule,
     washroomLimitMinutes,
+    users,
     addToast,
     triggerAudio,
     triggerVoice,
@@ -51,44 +57,241 @@ export function CandidateCard({
   } = useApp();
 
   const [loadingAction, setLoadingAction] = useState(false);
-  const [isFaceManuallyVerified, setIsFaceManuallyVerified] = useState(false);
-  const [signatureData, setSignatureData] = useState({ hasSignature: false, dataUrl: null });
+
+  // 3-Factor Entrance Steps:
+  // Step 1: Face Detection & Confirmation
+  // Step 2: Digital Signature Match (>=50%)
+  // Step 3: RFID Smart ID Card Scan (Matches Candidate)
+  const [isFaceStepPassed, setIsFaceStepPassed] = useState(false);
+  const [isSignatureStepPassed, setIsSignatureStepPassed] = useState(false);
+  const [isRfidStepPassed, setIsRfidStepPassed] = useState(false);
+  const [lockedCandidate, setLockedCandidate] = useState(null);
+
+  const [scannedRfidTag, setScannedRfidTag] = useState("");
+  const [manualRfidInput, setManualRfidInput] = useState("");
+  const [isRfidHardwareConnected, setIsRfidHardwareConnected] = useState(false);
+
+  const [signatureData, setSignatureData] = useState({
+    hasSignature: false,
+    dataUrl: null,
+    matchResult: null,
+    isOverridden: false,
+  });
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
 
-  // Sync manual verification with locked state
-  useEffect(() => {
-    if (!isLocked) {
-      setIsFaceManuallyVerified(false);
-    }
-  }, [isLocked]);
+  const lastProcessedRfidEpoch = useRef(Date.now() / 1000);
 
-  // Reset steps whenever detected candidate changes
+  // Active candidate: use locked candidate once face is confirmed, otherwise live detected candidate
+  const activeCandidate = isFaceStepPassed && lockedCandidate ? lockedCandidate : detectedCandidate;
+
+  // Reset entire 3-factor verification flow
+  const handleResetVerification = useCallback(() => {
+    setIsFaceStepPassed(false);
+    setIsSignatureStepPassed(false);
+    setIsRfidStepPassed(false);
+    setLockedCandidate(null);
+    setScannedRfidTag("");
+    setManualRfidInput("");
+    setSignatureData({ hasSignature: false, dataUrl: null, matchResult: null, isOverridden: false });
+    setIsSignatureModalOpen(false);
+    lastProcessedRfidEpoch.current = Date.now() / 1000;
+    api.clearLatestRFID().catch(() => {});
+    onLockScanner?.(false);
+    onResetScanner?.();
+    triggerAudio("warning");
+    addToast("🔄 Entrance verification reset. Ready for next candidate.", "info");
+  }, [onLockScanner, onResetScanner, triggerAudio, addToast]);
+
+  // Reset all steps automatically when active exam room changes
   useEffect(() => {
-    if (!isLocked) {
-      setIsFaceManuallyVerified(false);
-      setSignatureData({ hasSignature: false, dataUrl: null });
-      setIsSignatureModalOpen(false);
+    setIsFaceStepPassed(false);
+    setIsSignatureStepPassed(false);
+    setIsRfidStepPassed(false);
+    setLockedCandidate(null);
+    setScannedRfidTag("");
+    setManualRfidInput("");
+    setSignatureData({ hasSignature: false, dataUrl: null, matchResult: null, isOverridden: false });
+    setIsSignatureModalOpen(false);
+    lastProcessedRfidEpoch.current = Date.now() / 1000;
+    api.clearLatestRFID().catch(() => {});
+    onLockScanner?.(false);
+  }, [activeRoomId, onLockScanner]);
+
+  // Handle Step 1: Confirm Face (Manual user click / Enter)
+  const handleConfirmFace = useCallback(() => {
+    if (!detectedCandidate || !detectedCandidate.id) {
+      addToast("⚠️ No candidate face recognized in camera feed.", "warning");
+      return;
     }
-  }, [detectedCandidate?.id, isLocked]);
+
+    // Lock detected candidate
+    setLockedCandidate(detectedCandidate);
+    setIsFaceStepPassed(true);
+    setIsSignatureStepPassed(false);
+    setIsRfidStepPassed(false);
+    setScannedRfidTag("");
+    lastProcessedRfidEpoch.current = Date.now() / 1000;
+    api.clearLatestRFID().catch(() => {});
+    onLockScanner?.(true);
+
+    triggerAudio("success");
+    triggerVoice(`Face identity verified for ${detectedCandidate.name}. Please sign on the tablet.`);
+    addToast(`✅ Step 1 Passed: Face Verified for ${detectedCandidate.name}! Opening Signature Pad...`, "success");
+
+    // Automatically open signature pad
+    setIsSignatureModalOpen(true);
+  }, [detectedCandidate, onLockScanner, triggerAudio, triggerVoice, addToast]);
+
+  // Handle Step 2: Digital Signature Callback
+  const handleAcceptSignature = useCallback(
+    (dataUrl, matchRes) => {
+      const cand = activeCandidate || detectedCandidate;
+      const isMatch = matchRes ? matchRes.is_match && matchRes.similarity_score >= 50.0 : true;
+
+      setSignatureData({
+        hasSignature: true,
+        dataUrl,
+        matchResult: matchRes,
+        isOverridden: false,
+      });
+
+      if (isMatch) {
+        setIsSignatureStepPassed(true);
+        setIsRfidStepPassed(false);
+        setScannedRfidTag("");
+        // Reset RFID epoch to NOW so only cards tapped after this moment are processed
+        lastProcessedRfidEpoch.current = Date.now() / 1000;
+        api.clearLatestRFID().catch(() => {});
+
+        triggerAudio("success");
+        triggerVoice(`Signature verified for ${cand?.name || "candidate"}. Please tap student ID card.`);
+        addToast(
+          `✅ Step 2 Passed: Signature Verified (${matchRes?.similarity_score || 100}% match) for ${cand?.name}! Please tap RFID ID Card.`,
+          "success"
+        );
+      } else {
+        setIsSignatureStepPassed(false);
+        triggerAudio("alert");
+        triggerVoice(`Signature mismatch for ${cand?.name}. Match score is below 50 percent.`);
+        addToast(
+          `❌ Signature Mismatch: Live signature did NOT match reference for ${cand?.name}! (Match: ${matchRes?.similarity_score}%, Required: 50%+)`,
+          "error"
+        );
+      }
+    },
+    [activeCandidate, detectedCandidate, triggerAudio, triggerVoice, addToast]
+  );
+
+  // Handle Step 3: RFID Smart ID Card Scan
+  const handleRfidScanned = useCallback(
+    (tag) => {
+      if (!tag || !tag.trim()) return;
+      const cleanTag = tag.trim();
+      const cand = activeCandidate || detectedCandidate;
+
+      if (!cand || !cand.id) {
+        addToast("⚠️ Please verify candidate Face (Step 1) and Signature (Step 2) first.", "warning");
+        return;
+      }
+
+      setScannedRfidTag(cleanTag);
+
+      // Check if scanned tag belongs to the SAME candidate
+      const candUser = users.find((u) => u.id === cand.id);
+      const expectedTag = candUser?.rfid_tag || cand.rfidTag || cand.rfid_tag;
+
+      // Find which candidate owns this scanned tag
+      const cardOwner = users.find((u) => u.rfid_tag === cleanTag);
+
+      if (expectedTag && expectedTag === cleanTag) {
+        // MATCH: Exact same candidate's card!
+        setIsRfidStepPassed(true);
+        triggerAudio("success");
+        triggerVoice(`ID card verified for ${cand.name}. All 3 verification factors complete.`);
+        addToast(`✅ Step 3 Passed: RFID ID Card Verified for ${cand.name} (Tag: ${cleanTag})!`, "success");
+      } else if (!expectedTag && cardOwner && cardOwner.id === cand.id) {
+        // Tag matches candidate profile
+        setIsRfidStepPassed(true);
+        triggerAudio("success");
+        triggerVoice(`ID card verified for ${cand.name}.`);
+        addToast(`✅ Step 3 Passed: RFID ID Card Verified for ${cand.name} (Tag: ${cleanTag})!`, "success");
+      } else {
+        // MISMATCH!
+        setIsRfidStepPassed(false);
+        triggerAudio("alert");
+        const ownerName = cardOwner ? cardOwner.name : "Unregistered Tag";
+        triggerVoice("Security Alert! ID card does not match the candidate.");
+        addToast(
+          `❌ RFID Mismatch: Scanned ID Card (${cleanTag} - ${ownerName}) does NOT belong to ${cand.name}!`,
+          "error"
+        );
+
+        // Auto log proxy violation
+        api.logProxyAlert({
+          image: cand.liveSnapshot,
+          confidence: 0.95,
+          notes: `🚨 RFID Card Mismatch at Entrance: Scanned card (${cleanTag} - ${ownerName}) does not match Candidate (${cand.name} - ${cand.rollId || cand.roll_id}).`,
+        }).catch(() => {});
+      }
+    },
+    [activeCandidate, detectedCandidate, users, triggerAudio, triggerVoice, addToast]
+  );
+
+  // Poll for hardware RFID scans when on Step 3
+  useEffect(() => {
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await api.getLatestRFID();
+        setIsRfidHardwareConnected(!!res.is_connected);
+
+        // Only process live RFID hardware scan if we are on Step 3 (Face & Signature passed, RFID pending)
+        if (
+          isFaceStepPassed &&
+          (isSignatureStepPassed || signatureData.isOverridden) &&
+          !isRfidStepPassed &&
+          res &&
+          res.scanned &&
+          res.scan &&
+          res.scan.epoch > lastProcessedRfidEpoch.current
+        ) {
+          lastProcessedRfidEpoch.current = res.scan.epoch;
+          handleRfidScanned(res.scan.tag);
+        }
+      } catch (e) {
+        // silent polling catch
+      }
+    }, 750);
+
+    return () => clearInterval(intervalId);
+  }, [isFaceStepPassed, isSignatureStepPassed, isRfidStepPassed, signatureData.isOverridden, handleRfidScanned]);
 
   // Execute Attendance Action (ENTRY, WASHROOM_OUT, WASHROOM_IN, EXIT)
   const handleAction = async (actionType, overrideAdmit = false, overrideSchedule = false) => {
-    if (!detectedCandidate || loadingAction) return;
+    const cand = activeCandidate || detectedCandidate;
+    if (!cand || loadingAction) return;
 
-    if (actionType === "ENTRY" && !signatureData.hasSignature) {
-      triggerAudio("warning");
-      triggerVoice(`Digital signature required. Please sign using the graphics tablet.`);
-      addToast("✍️ Digital signature required before confirming entry!", "warning");
-      return;
+    if (actionType === "ENTRY") {
+      if (!isFaceStepPassed) {
+        addToast("⚠️ Please confirm Face Verification (Step 1) first!", "warning");
+        return;
+      }
+      if (!signatureData.hasSignature && !signatureData.isOverridden) {
+        addToast("✍️ Digital signature required (Step 2) before confirming entry!", "warning");
+        return;
+      }
+      if (!isRfidStepPassed) {
+        addToast("💳 Please scan the candidate's RFID ID Card (Step 3) before entry!", "warning");
+        return;
+      }
     }
 
     setLoadingAction(true);
     try {
       const res = await api.executeAttendanceAction({
-        candidate_id: detectedCandidate.id,
+        candidate_id: cand.id,
         action: actionType,
         active_room_id: activeRoomId,
-        image: detectedCandidate.liveSnapshot,
+        image: cand.liveSnapshot || detectedCandidate?.liveSnapshot,
         signature: actionType === "ENTRY" ? signatureData.dataUrl : undefined,
         exam_name: examName,
         hall_name: activeRoomName,
@@ -98,34 +301,46 @@ export function CandidateCard({
 
       if (actionType === "ENTRY") {
         triggerAudio("success");
-        triggerVoice(`Entry and signature confirmed for ${detectedCandidate.name}. Welcome to the exam hall.`);
-        addToast(`✅ Entry & Signature Confirmed: ${detectedCandidate.name} (${res.record?.entry_time})`, "success");
+        triggerVoice(`Entry and signature confirmed for ${cand.name}. Welcome to the exam hall.`);
+        addToast(`🎉 3-Factor Entry Confirmed: ${cand.name} (${res.record?.entry_time})`, "success");
       } else if (actionType === "WASHROOM_OUT") {
         triggerAudio("warning");
         const limit = activeSchedule?.washroom_limit_minutes || washroomLimitMinutes || 10;
-        triggerVoice(`Washroom break recorded for ${detectedCandidate.name}. Time limit is ${limit} minutes.`);
-        addToast(`🚻 Washroom Break (Out): ${detectedCandidate.name} (${res.record?.washroom_out_time})`, "warning");
+        triggerVoice(`Washroom break recorded for ${cand.name}. Time limit is ${limit} minutes.`);
+        addToast(`🚻 Washroom Break (Out): ${cand.name} (${res.record?.washroom_out_time})`, "warning");
       } else if (actionType === "WASHROOM_IN") {
         const lastBreak = res.record?.last_break;
         if (lastBreak?.is_overtime) {
           triggerAudio("alert");
-          triggerVoice(`Warning! Washroom time limit exceeded. Candidate ${detectedCandidate.name} returned ${lastBreak.overtime_minutes} minutes late.`);
-          addToast(`⚠️ OVERTIME VIOLATION: ${detectedCandidate.name} spent ${lastBreak.duration_minutes}m (Limit: ${lastBreak.limit_minutes}m)!`, "error");
+          triggerVoice(`Warning! Washroom time limit exceeded. Candidate ${cand.name} returned ${lastBreak.overtime_minutes} minutes late.`);
+          addToast(`⚠️ OVERTIME VIOLATION: ${cand.name} spent ${lastBreak.duration_minutes}m (Limit: ${lastBreak.limit_minutes}m)!`, "error");
         } else {
           triggerAudio("success");
-          triggerVoice(`Welcome back to the exam hall, ${detectedCandidate.name}.`);
-          addToast(`🟢 Washroom Return (In): ${detectedCandidate.name} (${lastBreak?.duration_minutes || 0}m spent)`, "success");
+          triggerVoice(`Welcome back to the exam hall, ${cand.name}.`);
+          addToast(`🟢 Washroom Return (In): ${cand.name} (${lastBreak?.duration_minutes || 0}m spent)`, "success");
         }
       } else if (actionType === "EXIT") {
         triggerAudio("warning");
-        triggerVoice(`Exit confirmed for ${detectedCandidate.name}. Exam submitted.`);
-        addToast(`🚪 Exit Confirmed: ${detectedCandidate.name} (${res.record?.exit_time})`, "warning");
+        triggerVoice(`Exit confirmed for ${cand.name}. Exam submitted.`);
+        addToast(`🚪 Exit Confirmed: ${cand.name} (${res.record?.exit_time})`, "warning");
       }
 
       await loadAttendance();
       await loadAlerts();
       await loadWashroomActive();
-      if (onPunchCompleted) onPunchCompleted(detectedCandidate.name, actionType);
+      if (onPunchCompleted) onPunchCompleted(cand.name, actionType);
+
+      // Reset verification steps for next student
+      setIsFaceStepPassed(false);
+      setIsSignatureStepPassed(false);
+      setIsRfidStepPassed(false);
+      setLockedCandidate(null);
+      setScannedRfidTag("");
+      setManualRfidInput("");
+      setSignatureData({ hasSignature: false, dataUrl: null, matchResult: null, isOverridden: false });
+      lastProcessedRfidEpoch.current = Date.now() / 1000;
+      api.clearLatestRFID().catch(() => {});
+      onLockScanner?.(false);
     } catch (err) {
       addToast(`Error: ${err.message}`, "error");
     } finally {
@@ -135,15 +350,16 @@ export function CandidateCard({
 
   // Grant Special Clearance
   const handleSpecialClearance = async () => {
-    if (!detectedCandidate) return;
+    const cand = activeCandidate || detectedCandidate;
+    if (!cand) return;
     try {
       await api.clearAdmitCard({
-        candidate_id: detectedCandidate.id,
+        candidate_id: cand.id,
         admit_status: "CLEARED",
         special_clearance_by: "Hall In-Charge",
         remarks: "Special Clearance Granted at Entrance",
       });
-      addToast(`Special clearance granted to ${detectedCandidate.name}`, "success");
+      addToast(`Special clearance granted to ${cand.name}`, "success");
       await loadAllocations();
       await handleAction("ENTRY", true);
     } catch (e) {
@@ -153,11 +369,12 @@ export function CandidateCard({
 
   // Log Proxy Security Alert
   const handleLogProxy = async () => {
-    if (!detectedCandidate) return;
+    const cand = activeCandidate || detectedCandidate;
+    if (!cand) return;
     try {
       await api.logProxyAlert({
-        image: detectedCandidate.liveSnapshot,
-        confidence: detectedCandidate.detConfidence || 0.9,
+        image: cand.liveSnapshot,
+        confidence: cand.detConfidence || 0.9,
         notes: `Unregistered face at ${activeRoomName}`,
       });
       addToast("Security violation recorded in audit logs.", "warning");
@@ -167,27 +384,41 @@ export function CandidateCard({
     }
   };
 
-  // 1. Idle State
-  if (!detectedCandidate) {
+  // 1. Idle State (No Candidate in Frame)
+  if (!activeCandidate) {
     return (
       <div className="glass-panel p-6 flex flex-col items-center justify-center text-center gap-4 min-h-[460px] border-sky-500/20">
         <div className="w-16 h-16 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center animate-radar shadow-neon-cyan">
           <Scan className="w-8 h-8 text-cyber-cyan" />
         </div>
         <div>
-          <h3 className="text-base font-bold text-white">Waiting for Candidate</h3>
+          <h3 className="text-base font-bold text-white">3-Factor Exam Entrance Active</h3>
           <p className="text-xs text-slate-400 max-w-xs mt-1">
-            Candidate faces the camera. The system will verify identity, room allocation, department schedule, and washroom limits.
+            Step 1: Face Biometric Auto-Detect &bull; Step 2: Digital Signature Match &bull; Step 3: RFID ID Card Scan.
           </p>
         </div>
+
+        {/* RFID Hardware Live Status */}
+        <div className="w-full max-w-sm p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col gap-2.5 text-left">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <div className="flex items-center gap-2 text-slate-300">
+              <Radio className={`w-4 h-4 ${isRfidHardwareConnected ? "text-emerald-400 animate-pulse" : "text-amber-400"}`} />
+              <span>RFID Scanner: {isRfidHardwareConnected ? "USB Reader Online" : "Listening (Auto/Manual)"}</span>
+            </div>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isRfidHardwareConnected ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"}`}>
+              {isRfidHardwareConnected ? "READY" : "STANDBY"}
+            </span>
+          </div>
+        </div>
+
         <div className="px-3 py-1 rounded-full bg-slate-900 border border-slate-700 text-[11px] font-mono text-slate-400">
-          Scanning Live Feed...
+          Waiting for Candidate Face in Camera...
         </div>
       </div>
     );
   }
 
-  const { isRecognized, attStatus, name, rollId, department, confidencePercent, registeredPhoto, liveSnapshot, allocation, attendanceRecord } = detectedCandidate;
+  const { isRecognized, attStatus, name, rollId, department, confidencePercent, registeredPhoto, liveSnapshot, allocation, attendanceRecord } = activeCandidate;
 
   // 2. Unauthorized / Proxy Alert State
   if (!isRecognized) {
@@ -228,7 +459,7 @@ export function CandidateCard({
   }
 
   // 1.5. Standby Mode (No Live Exam Running - Camera functions as normal camera)
-  if (attStatus === "STANDBY_NO_EXAM" || detectedCandidate.isStandby) {
+  if (attStatus === "STANDBY_NO_EXAM" || activeCandidate?.isStandby) {
     return (
       <div className="glass-panel p-6 flex flex-col gap-4 min-h-[460px] border-emerald-500/30 bg-emerald-950/10">
         <div className="flex items-center justify-between pb-3 border-b border-emerald-500/30">
@@ -273,7 +504,7 @@ export function CandidateCard({
           </div>
           <span className="text-xs text-slate-400">Department: {department || "N/A"}</span>
           <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-xs text-slate-300">
-            {detectedCandidate.remarks || "No active exam session right now. Face recognized successfully in normal camera mode."}
+            {activeCandidate?.remarks || "No active exam session right now. Face recognized successfully in normal camera mode."}
           </div>
         </div>
       </div>
@@ -305,8 +536,8 @@ export function CandidateCard({
 
           <div className="p-4 rounded-lg bg-slate-900/90 border border-rose-500/30 flex flex-col gap-2">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ALLOCATED EXAM HALL:</span>
-            <div className="text-sm font-black text-rose-400">{detectedCandidate.allocatedRoomName || "Another Hall"}</div>
-            <div className="text-xs font-mono text-amber-400">{detectedCandidate.allocatedSeat || "Seat Unassigned"}</div>
+            <div className="text-sm font-black text-rose-400">{activeCandidate?.allocatedRoomName || "Another Hall"}</div>
+            <div className="text-xs font-mono text-amber-400">{activeCandidate?.allocatedSeat || "Seat Unassigned"}</div>
           </div>
 
           <p className="text-xs text-slate-400 italic text-center">
@@ -336,23 +567,23 @@ export function CandidateCard({
             {liveSnapshot && <img src={liveSnapshot} alt="Candidate" className="w-16 h-16 rounded-lg object-cover border border-amber-500/40" />}
             <div>
               <h4 className="text-base font-extrabold text-white">{name}</h4>
-              <p className="text-xs font-mono text-slate-400">Dept: {detectedCandidate.candidateDepartment || department || "Unknown"}</p>
+              <p className="text-xs font-mono text-slate-400">Dept: {activeCandidate?.candidateDepartment || department || "Unknown"}</p>
             </div>
           </div>
 
           <div className="p-3.5 rounded-lg bg-slate-900/90 border border-amber-500/30 flex flex-col gap-2 text-xs">
             <div className="flex justify-between">
               <span className="text-slate-400">SCHEDULED DEPTS:</span>
-              <strong className="text-cyan-400">{(detectedCandidate.allowedDepartments || []).join(", ") || "Other"}</strong>
+              <strong className="text-cyan-400">{(activeCandidate?.allowedDepartments || []).join(", ") || "Other"}</strong>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">CANDIDATE DEPT:</span>
-              <strong className="text-amber-400">{detectedCandidate.candidateDepartment || department}</strong>
+              <strong className="text-amber-400">{activeCandidate?.candidateDepartment || department}</strong>
             </div>
           </div>
         </div>
 
-        <button onClick={() => handleAction("ENTRY", false, true)} className="w-full py-2.5 px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition">
+        <button onClick={() => handleAction("ENTRY", false, true)} className="w-full py-2.5 px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer">
           <ShieldAlert className="w-4 h-4" /> Override & Allow Entry
         </button>
       </div>
@@ -384,12 +615,12 @@ export function CandidateCard({
           <div>
             <h4 className="text-base font-extrabold text-white">{name}</h4>
             <p className="text-xs text-amber-300 mt-2 font-mono p-2.5 rounded-lg bg-slate-900/90 border border-amber-500/30">
-              {detectedCandidate.remarks || "No active exam scheduled for today in this hall. Entry is restricted."}
+              {activeCandidate?.remarks || "No active exam scheduled for today in this hall. Entry is restricted."}
             </p>
           </div>
         </div>
 
-        <button onClick={() => handleAction("ENTRY", false, true)} className="w-full py-2.5 px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition">
+        <button onClick={() => handleAction("ENTRY", false, true)} className="w-full py-2.5 px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer">
           <ShieldAlert className="w-4 h-4" /> Grant Special Permission & Allow Entry
         </button>
       </div>
@@ -420,11 +651,11 @@ export function CandidateCard({
           </div>
 
           <div className="p-3.5 rounded-lg bg-slate-900/90 border border-amber-500/30 text-xs text-amber-300">
-            Reason: {detectedCandidate.remarks || "Tuition Fee / Dues Verification Pending"}
+            Reason: {activeCandidate?.remarks || "Tuition Fee / Dues Verification Pending"}
           </div>
         </div>
 
-        <button onClick={handleSpecialClearance} className="w-full py-2.5 px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition">
+        <button onClick={handleSpecialClearance} className="w-full py-2.5 px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer">
           <CheckCircle2 className="w-4 h-4" /> Grant Special Clearance & Check-In
         </button>
       </div>
@@ -551,153 +782,248 @@ export function CandidateCard({
           <div className="flex flex-col gap-3">
             {/* 3-Step Progress Stepper */}
             <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
-              {/* Step 1 Badge */}
+              {/* Step 1 Badge: Face Biometric */}
               <div
                 className={`flex items-center justify-center gap-1 p-1.5 rounded-lg border transition ${
-                  isFaceManuallyVerified
+                  isFaceStepPassed
                     ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold"
                     : "bg-cyan-500/15 border-cyan-500/40 text-cyan-300 font-bold animate-pulse"
                 }`}
               >
-                <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">1. {isFaceManuallyVerified ? "Face OK" : "Verify Face"}</span>
+                {isFaceStepPassed ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : <Scan className="w-3 h-3 flex-shrink-0" />}
+                <span className="truncate">1. {isFaceStepPassed ? "Face OK" : "Face Detect"}</span>
               </div>
 
-              {/* Step 2 Badge */}
+              {/* Step 2 Badge: Digital Signature */}
               <div
                 className={`flex items-center justify-center gap-1 p-1.5 rounded-lg border transition ${
-                  signatureData.hasSignature
+                  isSignatureStepPassed || signatureData.isOverridden
                     ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold"
-                    : isFaceManuallyVerified
+                    : isFaceStepPassed
+                    ? "bg-amber-500/15 border-amber-500/40 text-amber-300 font-bold animate-pulse"
+                    : "bg-slate-900 border-slate-800 text-slate-500"
+                }`}
+              >
+                {isSignatureStepPassed || signatureData.isOverridden ? (
+                  <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+                ) : (
+                  <PenTool className="w-3 h-3 flex-shrink-0" />
+                )}
+                <span className="truncate">
+                  2. {isSignatureStepPassed || signatureData.isOverridden ? "Sign OK" : "Take Sign"}
+                </span>
+              </div>
+
+              {/* Step 3 Badge: RFID ID Card */}
+              <div
+                className={`flex items-center justify-center gap-1 p-1.5 rounded-lg border transition ${
+                  isRfidStepPassed
+                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-bold"
+                    : isFaceStepPassed && (isSignatureStepPassed || signatureData.isOverridden)
                     ? "bg-sky-500/15 border-sky-500/40 text-sky-300 font-bold animate-pulse"
                     : "bg-slate-900 border-slate-800 text-slate-500"
                 }`}
               >
-                <PenTool className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">2. {signatureData.hasSignature ? "Signed" : "Take Sign"}</span>
-              </div>
-
-              {/* Step 3 Badge */}
-              <div
-                className={`flex items-center justify-center gap-1 p-1.5 rounded-lg border transition ${
-                  isFaceManuallyVerified && signatureData.hasSignature
-                    ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-bold animate-pulse"
-                    : "bg-slate-900 border-slate-800 text-slate-500"
-                }`}
-              >
-                <LogIn className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">3. Enter Exam</span>
+                {isRfidStepPassed ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : <CreditCard className="w-3 h-3 flex-shrink-0" />}
+                <span className="truncate">3. {isRfidStepPassed ? "Card OK" : "Scan Card"}</span>
               </div>
             </div>
 
-            {/* Dynamic Step Buttons */}
-            {!isFaceManuallyVerified && (
-              <button
-                type="button"
-                disabled={loadingAction}
-                onClick={() => {
-                  setIsFaceManuallyVerified(true);
-                  onLockScanner?.(true);
-                  triggerAudio("success");
-                  triggerVoice(`Face identity verified for ${name}. Camera scanner locked. Please take digital signature.`);
-                  addToast(`✅ Face Identity Verified: ${name} (Scanner Locked)`, "success");
-                }}
-                className="w-full py-3 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 transition shadow-neon-cyan transform hover:-translate-y-0.5 cursor-pointer"
-              >
-                <CheckCircle2 className="w-5 h-5" /> 1. VERIFY FACE IDENTITY
-              </button>
-            )}
+            {/* STEP 1 UI: Candidate face is detected in camera, user manually clicks or enters to proceed */}
+            {!isFaceStepPassed && (
+              <div className="p-3.5 rounded-xl bg-slate-900/95 border-2 border-cyan-500/40 flex flex-col gap-2.5 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
+                    <Scan className="w-4 h-4 text-cyber-cyan animate-pulse" />
+                    Step 1: Face Biometric Detected ({name})
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
+                    RECOGNIZED
+                  </span>
+                </div>
 
-            {isFaceManuallyVerified && !signatureData.hasSignature && (
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  disabled={loadingAction}
-                  onClick={() => setIsSignatureModalOpen(true)}
-                  className="w-full py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-black text-sm flex items-center justify-center gap-2 transition shadow-neon-cyan animate-pulse transform hover:-translate-y-0.5 cursor-pointer"
-                >
-                  <PenTool className="w-5 h-5" /> 2. TAKE DIGITAL SIGNATURE (OPEN PAD)
-                </button>
+                <p className="text-[11px] text-slate-300">
+                  Candidate <strong>{name}</strong> detected with {confidencePercent || 96}% confidence. Click below to lock and proceed to signature.
+                </p>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsFaceManuallyVerified(false);
-                    setSignatureData({ hasSignature: false, dataUrl: null });
-                    setIsSignatureModalOpen(false);
-                    onLockScanner?.(false);
-                    onResetScanner?.();
-                    triggerAudio("warning");
-                    addToast("🔄 Face verification reset. Camera unlocked.", "info");
-                  }}
-                  className="w-full py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition"
+                  onClick={handleConfirmFace}
+                  className="w-full py-3 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition shadow-neon-cyan transform hover:-translate-y-0.5 cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" /> Reset / Re-Scan Face
+                  <CheckCircle2 className="w-4 h-4" /> 1. CONFIRM FACE & PROCEED TO SIGNATURE ➔
                 </button>
               </div>
             )}
 
-            {isFaceManuallyVerified && signatureData.hasSignature && (
-              <div className="flex flex-col gap-3">
-                {/* Large Captured Signature Preview Card */}
-                <div className="p-3.5 rounded-xl bg-slate-900/95 border-2 border-emerald-500/40 flex flex-col gap-2.5 shadow-lg animate-in fade-in">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                        <CheckCircle2 className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                        Digital Signature Captured
-                      </span>
+            {/* STEP 2 UI: Face is confirmed, prompt / open Digital Signature pad */}
+            {isFaceStepPassed && !isSignatureStepPassed && !signatureData.isOverridden && (
+              <div className="p-3.5 rounded-xl bg-slate-900/95 border-2 border-amber-500/40 flex flex-col gap-2.5 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <PenTool className="w-4 h-4 text-amber-400 animate-pulse" />
+                    Step 2: Digital Signature Required ({name})
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold">
+                    STEP 2
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-300">
+                  Candidate must sign on the graphics tablet / canvas to match registered signature (≥50% threshold).
+                </p>
+
+                {/* If signature failed match */}
+                {signatureData.matchResult && !signatureData.matchResult.is_match && (
+                  <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-xs font-mono font-bold text-rose-300">
+                      <span>⚠️ Signature Mismatch: {signatureData.matchResult.similarity_score}%</span>
+                      <span>Min: 50%</span>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsSignatureModalOpen(true)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-mono font-bold flex items-center gap-1.5 transition border border-slate-700 shadow-sm"
-                      title="Change or re-draw signature"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5 text-cyan-400" /> Re-Sign / Edit
-                    </button>
+                    <p className="text-[10px] text-rose-200">
+                      Signature similarity did not reach the 50% threshold. Candidate may re-sign or Invigilator can grant override approval.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsSignatureModalOpen(true)}
+                        className="flex-1 py-1.5 px-2 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition cursor-pointer"
+                      >
+                        Re-Sign on Pad
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSignatureData((prev) => ({ ...prev, isOverridden: true }));
+                          setIsSignatureStepPassed(true);
+                          addToast("Invigilator granted manual signature approval", "success");
+                        }}
+                        className="flex-1 py-1.5 px-2 rounded bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs transition cursor-pointer"
+                      >
+                        Invigilator Override
+                      </button>
+                    </div>
                   </div>
+                )}
 
-                  {/* High visibility large signature display */}
-                  <div className="w-full h-28 rounded-xl bg-slate-950 border border-emerald-500/30 flex items-center justify-center overflow-hidden p-2 shadow-inner relative">
-                    <img
-                      src={signatureData.dataUrl}
-                      alt="Signature Preview"
-                      className="w-full h-full object-contain filter brightness-125 drop-shadow-[0_0_10px_rgba(56,189,248,0.4)]"
-                    />
-                    <span className="absolute bottom-1.5 right-2.5 text-[9px] font-mono text-slate-500">
-                      Huion H640P Digital Proof
-                    </span>
+                {(!signatureData.matchResult || signatureData.matchResult.is_match) && (
+                  <button
+                    type="button"
+                    onClick={() => setIsSignatureModalOpen(true)}
+                    className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition shadow-neon-amber transform hover:-translate-y-0.5 cursor-pointer"
+                  >
+                    <PenTool className="w-4 h-4" /> 2. TAKE DIGITAL SIGNATURE (OPEN PAD)
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleResetVerification}
+                  className="w-full py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Cancel / Reset Verification
+                </button>
+              </div>
+            )}
+
+            {/* STEP 3 UI: Face & Signature passed, waiting for RFID Smart ID Card scan */}
+            {isFaceStepPassed && (isSignatureStepPassed || signatureData.isOverridden) && !isRfidStepPassed && (
+              <div className="p-3.5 rounded-xl bg-slate-900/95 border-2 border-sky-500/40 flex flex-col gap-2.5 shadow-lg animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    Step 3: Tap Candidate RFID Smart ID Card
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">
+                    SCAN CARD
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-300">
+                  Tap student ID card on the RFID reader. Card holder must match candidate <strong>{name}</strong>.
+                </p>
+
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Tap card on reader or enter tag..."
+                    value={manualRfidInput}
+                    onChange={(e) => setManualRfidInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && manualRfidInput.trim()) {
+                        handleRfidScanned(manualRfidInput.trim());
+                        setManualRfidInput("");
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (manualRfidInput.trim()) {
+                        handleRfidScanned(manualRfidInput.trim());
+                        setManualRfidInput("");
+                      } else if (activeCandidate?.rfidTag || activeCandidate?.rfid_tag) {
+                        handleRfidScanned(activeCandidate.rfidTag || activeCandidate.rfid_tag);
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono transition cursor-pointer"
+                  >
+                    Verify Card
+                  </button>
+                </div>
+
+                {/* Quick tap registered card button */}
+                {activeCandidate?.rfidTag && (
+                  <button
+                    type="button"
+                    onClick={() => handleRfidScanned(activeCandidate.rfidTag)}
+                    className="w-full py-1.5 px-2 rounded bg-slate-800 hover:bg-cyan-950/60 border border-slate-700 text-[11px] font-mono text-cyan-300 transition cursor-pointer"
+                  >
+                    Tap Registered Card for {name} ({activeCandidate.rfidTag})
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleResetVerification}
+                  className="w-full py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Reset Verification
+                </button>
+              </div>
+            )}
+
+            {/* ALL 3 STEPS COMPLETE: Ready to Mark Entry Attendance */}
+            {isFaceStepPassed && (isSignatureStepPassed || signatureData.isOverridden) && isRfidStepPassed && (
+              <div className="flex flex-col gap-3 animate-in fade-in">
+                <div className="p-3 rounded-xl bg-emerald-950/30 border-2 border-emerald-500/50 flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>ALL 3 FACTORS VERIFIED (FACE + SIGNATURE + RFID)</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono bg-slate-950/80 p-2 rounded-lg border border-slate-800">
+                    <div className="text-emerald-400">1. Face: ✅ {name}</div>
+                    <div className="text-emerald-400">2. Sign: ✅ {signatureData.isOverridden ? "Override" : `${signatureData.matchResult?.similarity_score || 100}%`}</div>
+                    <div className="text-emerald-400">3. RFID: ✅ {scannedRfidTag}</div>
                   </div>
                 </div>
 
-                {/* Final Enter Exam Button */}
                 <button
                   type="button"
                   disabled={loadingAction}
                   onClick={() => handleAction("ENTRY")}
                   className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 transition shadow-neon-emerald transform hover:-translate-y-0.5 cursor-pointer"
                 >
-                  <LogIn className="w-5 h-5" /> 3. ENTER EXAM HALL (CONFIRM CHECK-IN)
+                  <LogIn className="w-5 h-5" /> 🎉 CONFIRM 3-FACTOR EXAM ENTRY
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsFaceManuallyVerified(false);
-                    setSignatureData({ hasSignature: false, dataUrl: null });
-                    setIsSignatureModalOpen(false);
-                    onLockScanner?.(false);
-                    onResetScanner?.();
-                    triggerAudio("warning");
-                    addToast("🔄 Face verification reset. Camera unlocked.", "info");
-                  }}
-                  className="w-full py-1.5 px-3 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 text-[11px] font-mono flex items-center justify-center gap-1.5 transition"
+                  onClick={handleResetVerification}
+                  className="w-full py-1.5 px-3 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 text-[11px] font-mono flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
-                  <RotateCcw className="w-3 h-3" /> Reset / Re-Scan Face
+                  <RotateCcw className="w-3 h-3" /> Reset Entrance Verification
                 </button>
               </div>
             )}
@@ -709,14 +1035,14 @@ export function CandidateCard({
             <button
               disabled={loadingAction}
               onClick={() => handleAction("WASHROOM_OUT")}
-              className="flex-1 py-3 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
+              className="flex-1 py-3 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
             >
               <Bath className="w-4 h-4" /> WASHROOM BREAK (OUT)
             </button>
             <button
               disabled={loadingAction}
               onClick={() => handleAction("EXIT")}
-              className="flex-1 py-3 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-neon-amber"
+              className="flex-1 py-3 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-neon-amber cursor-pointer"
             >
               <LogOut className="w-4 h-4" /> SUBMIT EXAM & EXIT
             </button>
@@ -727,7 +1053,7 @@ export function CandidateCard({
           <button
             disabled={loadingAction}
             onClick={() => handleAction("WASHROOM_IN")}
-            className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm flex items-center justify-center gap-2 transition shadow-neon-emerald"
+            className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm flex items-center justify-center gap-2 transition shadow-neon-emerald cursor-pointer"
           >
             <DoorOpen className="w-5 h-5" /> RETURN FROM WASHROOM (IN)
           </button>
@@ -744,15 +1070,12 @@ export function CandidateCard({
       <SignatureModal
         isOpen={isSignatureModalOpen}
         onClose={() => setIsSignatureModalOpen(false)}
+        candidateId={activeCandidate?.id || detectedCandidate?.id}
         candidateName={name}
         rollId={rollId}
+        registeredSignatureUrl={activeCandidate?.registeredSignature || activeCandidate?.registered_signature || detectedCandidate?.registered_signature || detectedCandidate?.registeredSignature}
         initialSignature={signatureData.dataUrl}
-        onAcceptSignature={(dataUrl) => {
-          setSignatureData({ hasSignature: true, dataUrl });
-          triggerAudio("success");
-          triggerVoice(`Signature accepted for ${name}. Ready to enter exam hall.`);
-          addToast(`✍️ Signature captured successfully for ${name}!`, "success");
-        }}
+        onAcceptSignature={handleAcceptSignature}
       />
     </div>
   );

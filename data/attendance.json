@@ -70,5 +70,107 @@
       "duration_minutes": 230.0
     }
   },
-  "2026-09-10": {}
+  "2026-09-10": {},
+  "2026-09-14": {
+    "012f939a": {
+      "candidate_id": "012f939a",
+      "name": "Imran",
+      "roll_id": "202314117",
+      "department": "Computer Science & Engineering",
+      "room_id": "room-101",
+      "room_name": "Room 101 - Main Auditorium",
+      "seat_number": "Assigned Seat",
+      "admit_status": "CLEARED",
+      "date": "2026-09-14",
+      "exam_name": "Data Structures & Algorithms - Semester Final",
+      "hall_name": "Room 101 - Main Auditorium",
+      "status": "INSIDE",
+      "entry_time": "11:24:13 AM",
+      "entry_iso": "2026-09-14T11:24:13.622707",
+      "entry_snapshot": "attendance/snapshots/2026-09-14/012f939a/entry_1789363453.jpg",
+      "signature_snapshot": "attendance/snapshots/2026-09-14/012f939a/signature_1789363453.png",
+      "signature_time": "11:24:13 AM",
+      "exit_time": null,
+      "exit_iso": null,
+      "exit_snapshot": null,
+      "duration_minutes": null,
+      "washroom_out_time": null,
+      "washroom_out_iso": null,
+      "washroom_out_snapshot": null,
+      "washroom_count": 0,
+      "total_washroom_minutes": 0.0,
+      "has_washroom_violation": false,
+      "washroom_logs": [],
+      "movement_history": [
+        {
+          "event_id": "60d89997",
+          "out_time": "11:24:13 AM",
+          "out_iso": "2026-09-14T11:24:13.622707",
+          "return_time": "11:34:55 AM",
+          "return_iso": "2026-09-14T11:34:55.075613",
+          "duration_sec": 641,
+          "duration_formatted": "10m 41s",
+          "status": "RETURNED",
+          "seat_number": "Assigned Seat",
+          "reason": "Delayed arrival at desk after gate entry"
+        }
+      ]
+    },
+    "9c685b64": {
+      "candidate_id": "9c685b64",
+      "name": "Imran",
+      "roll_id": "202314117",
+      "department": "Computer Science & Engineering",
+      "room_id": "room-101",
+      "room_name": "Room 101 - Main Auditorium",
+      "seat_number": "Assigned Seat",
+      "admit_status": "CLEARED",
+      "date": "2026-09-14",
+      "exam_name": "Data Structures & Algorithms - Final",
+      "hall_name": "Room 101 - Main Auditorium",
+      "status": "INSIDE",
+      "entry_time": "12:34:44 PM",
+      "entry_iso": "2026-09-14T12:34:44.604911",
+      "entry_snapshot": "attendance/snapshots/2026-09-14/9c685b64/entry_1789367684.jpg",
+      "signature_snapshot": "attendance/snapshots/2026-09-14/9c685b64/signature_1789367684.png",
+      "signature_time": "12:34:44 PM",
+      "exit_time": null,
+      "exit_iso": null,
+      "exit_snapshot": null,
+      "duration_minutes": null,
+      "washroom_out_time": null,
+      "washroom_out_iso": null,
+      "washroom_out_snapshot": null,
+      "washroom_count": 0,
+      "total_washroom_minutes": 0.0,
+      "has_washroom_violation": false,
+      "washroom_logs": [],
+      "movement_history": [
+        {
+          "event_id": "6a21d2b3",
+          "out_time": "12:35:00 PM",
+          "out_iso": "2026-09-14T12:35:00.158273",
+          "return_time": "12:35:27 PM",
+          "return_iso": "2026-09-14T12:35:27.155103",
+          "duration_sec": 26,
+          "duration_formatted": "26s",
+          "status": "RETURNED",
+          "seat_number": "Assigned Seat",
+          "reason": "Left desk during exam"
+        },
+        {
+          "event_id": "32a7096b",
+          "out_time": "12:37:37 PM",
+          "out_iso": "2026-09-14T12:37:37.825393",
+          "return_time": "12:38:03 PM",
+          "return_iso": "2026-09-14T12:38:03.068176",
+          "duration_sec": 25,
+          "duration_formatted": "25s",
+          "status": "RETURNED",
+          "seat_number": "Assigned Seat",
+          "reason": "Left desk during exam"
+        }
+      ]
+    }
+  }
 }

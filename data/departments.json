@@ -8,33 +8,30 @@
         "id": "crs-cse-1",
         "code": "CSE-1101",
         "title": "Structured Programming Language",
-        "enrolled_student_ids": [
-          "7bf0222a"
-        ]
+        "enrolled_student_ids": []
       },
       {
         "id": "crs-cse-2",
         "code": "CSE-2101",
         "title": "Data Structures & Algorithms",
         "enrolled_student_ids": [
-          "7bf0222a"
+          "58700b1f",
+          "c73754c8",
+          "d171c7d7",
+          "faea207a"
         ]
       },
       {
         "id": "crs-cse-3",
         "code": "CSE-3101",
         "title": "Database Management Systems",
-        "enrolled_student_ids": [
-          "7bf0222a"
-        ]
+        "enrolled_student_ids": []
       },
       {
         "id": "crs-cse-4",
         "code": "CSE-4101",
         "title": "Artificial Intelligence & Neural Networks",
-        "enrolled_student_ids": [
-          "7bf0222a"
-        ]
+        "enrolled_student_ids": []
       }
     ]
   },

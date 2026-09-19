@@ -37,7 +37,12 @@ import {
   Search,
   Armchair,
   AlertTriangle,
+  PenTool,
+  RotateCcw,
+  Tablet,
+  Eye,
 } from "lucide-react";
+import { SignatureModal } from "../attendance/SignatureModal";
 
 export function RegistrationHub() {
   const {
@@ -71,8 +76,56 @@ export function RegistrationHub() {
   const [capturedAngles, setCapturedAngles] = useState({});
   const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
 
+  // Digital Reference Signature State for Student Registration (Opens Centered Signature Modal)
+  const [isRegSigModalOpen, setIsRegSigModalOpen] = useState(false);
+  const [regSignaturePreview, setRegSignaturePreview] = useState(null);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+
+  // RFID Smart ID Card Attachment State
+  const [studentRfidTag, setStudentRfidTag] = useState("");
+  const [rfidDuplicateUser, setRfidDuplicateUser] = useState(null);
+  const [isRfidHardwareConnected, setIsRfidHardwareConnected] = useState(false);
+  const [customRfidInput, setCustomRfidInput] = useState("");
+  const lastProcessedRfidEpoch = useRef(0);
+
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+
+  // Polling for live hardware RFID tag scans
+  useEffect(() => {
+    if (subTab !== "student") return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await api.getLatestRFID();
+        setIsRfidHardwareConnected(!!res.is_connected);
+
+        if (res && res.scanned && res.scan && res.scan.epoch > lastProcessedRfidEpoch.current) {
+          lastProcessedRfidEpoch.current = res.scan.epoch;
+          const tag = res.scan.tag;
+
+          // Check duplicate RFID
+          const existing = users.find((u) => u.rfid_tag && u.rfid_tag.toLowerCase() === tag.toLowerCase());
+          if (existing) {
+            setRfidDuplicateUser(existing);
+            triggerAudio("warning");
+            triggerVoice(`Warning! RFID tag already assigned to ${existing.name}`);
+            addToast(`⚠️ RFID Card "${tag}" is already assigned to ${existing.name} (ID: ${existing.roll_id || "N/A"})!`, "error");
+          } else {
+            setRfidDuplicateUser(null);
+            setStudentRfidTag(tag);
+            triggerAudio("beep");
+            triggerVoice("ID Card scanned and attached.");
+            addToast(`💳 Student ID Card scanned & attached: ${tag}`, "success");
+          }
+        }
+      } catch (e) {
+        // silent polling catch
+      }
+    }, 800);
+
+    return () => clearInterval(intervalId);
+  }, [subTab, users, triggerAudio, triggerVoice, addToast]);
 
   const angles = [
     { key: "front", name: "Frontal", prompt: "Look straight directly into camera", icon: Circle },
@@ -128,6 +181,23 @@ export function RegistrationHub() {
     triggerAudio("beep");
     addToast(`Captured ${currentAngle.name} pose!`, "success");
 
+    // Asynchronously validate against already registered faces in the database
+    api.validateAngle({ image: b64, angle: currentAngle.key })
+      .then((res) => {
+        if (res && res.is_already_registered && res.matched_user) {
+          setDuplicateWarning(res.matched_user);
+          triggerAudio("warning");
+          triggerVoice(`Warning! This person is already registered as ${res.matched_user.name}`);
+          addToast(
+            `⚠️ Duplicate Face: This person is already registered as "${res.matched_user.name}" (ID: ${res.matched_user.roll_id || "N/A"})!`,
+            "error"
+          );
+        } else if (res && !res.is_already_registered) {
+          setDuplicateWarning(null);
+        }
+      })
+      .catch(() => {});
+
     if (currentAngleIndex < angles.length - 1) {
       setCurrentAngleIndex(currentAngleIndex + 1);
     }
@@ -143,6 +213,29 @@ export function RegistrationHub() {
       addToast("Please capture at least frontal face photo", "warning");
       return;
     }
+    if (!regSignaturePreview) {
+      triggerAudio("warning");
+      addToast("✍️ Digital reference signature is required! Please click the button to take signature.", "warning");
+      return;
+    }
+    if (!studentRfidTag) {
+      triggerAudio("warning");
+      triggerVoice("Student ID card required. Please scan or enter RFID tag.");
+      addToast("💳 Official Student ID Card (RFID) is required! Please scan card.", "warning");
+      return;
+    }
+    if (rfidDuplicateUser) {
+      triggerAudio("warning");
+      triggerVoice(`RFID Card already assigned to ${rfidDuplicateUser.name}`);
+      addToast(`⚠️ RFID Card "${studentRfidTag}" is already assigned to ${rfidDuplicateUser.name}!`, "error");
+      return;
+    }
+    if (duplicateWarning) {
+      triggerAudio("warning");
+      triggerVoice(`Registration rejected. This person is already registered as ${duplicateWarning.name}`);
+      addToast(`⚠️ Registration rejected! This person is already registered as "${duplicateWarning.name}" (ID: ${duplicateWarning.roll_id || "N/A"}).`, "error");
+      return;
+    }
 
     setIsSubmittingStudent(true);
     try {
@@ -150,6 +243,7 @@ export function RegistrationHub() {
       formData.append("name", studentName.trim());
       formData.append("roll_id", studentRoll.trim());
       formData.append("department", studentDept.trim());
+      formData.append("rfid_tag", studentRfidTag.trim());
 
       for (const [k, b64] of Object.entries(capturedAngles)) {
         const res = await fetch(b64);
@@ -157,17 +251,29 @@ export function RegistrationHub() {
         formData.append(k, blob, `${k}.jpg`);
       }
 
+      // Attach Mandatory Reference Digital Signature
+      const sigRes = await fetch(regSignaturePreview);
+      const sigBlob = await sigRes.blob();
+      formData.append("signature", sigBlob, "signature.png");
+
       await api.registerCandidate(formData);
       triggerAudio("success");
-      triggerVoice(`Student ${studentName} registered with ID ${studentRoll}.`);
-      addToast(`🎓 Student "${studentName}" registered successfully!`, "success");
+      triggerVoice(`Student ${studentName} registered with ID ${studentRoll} and RFID Card.`);
+      addToast(`🎓 Student "${studentName}" registered successfully with Face, Signature & RFID Card!`, "success");
 
       setStudentName("");
       setStudentRoll("");
+      setStudentRfidTag("");
+      setRfidDuplicateUser(null);
+      setCustomRfidInput("");
       setCapturedAngles({});
       setCurrentAngleIndex(0);
+      setRegSignaturePreview(null);
+      setDuplicateWarning(null);
       await loadUsers();
     } catch (err) {
+      triggerAudio("warning");
+      triggerVoice("Registration failed. Please check candidate details.");
       addToast(`Student registration error: ${err.message}`, "error");
     } finally {
       setIsSubmittingStudent(false);
@@ -1088,12 +1194,294 @@ export function RegistrationHub() {
                 </div>
               </div>
 
+              {/* Biometric Digital Signature Registration Pad */}
+              <div className="pt-1 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-semibold flex items-center gap-1.5">
+                    <PenTool className="w-3.5 h-3.5 text-cyber-cyan" />
+                    <span>Official Reference Signature</span>
+                    <span className="text-rose-400 font-bold">*</span>
+                    <span className="text-cyan-400 font-mono text-[10px]">(Huion H640P Pad / Mouse)</span>
+                  </label>
+
+                  {regSignaturePreview && (
+                    <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      <CheckCircle2 className="w-3 h-3" /> Ready
+                    </span>
+                  )}
+                </div>
+
+                {!regSignaturePreview ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsRegSigModalOpen(true)}
+                    className="w-full py-4 px-4 rounded-xl border-2 border-dashed border-cyan-500/50 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-950/40 text-cyan-300 flex flex-col items-center justify-center gap-2 transition group cursor-pointer shadow-lg shadow-cyan-950/30"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-cyan-500/10 group-hover:bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition-transform">
+                      <PenTool className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm font-bold text-white group-hover:text-cyan-200 flex items-center justify-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                        Take Digital Signature (Open Pad)
+                      </div>
+                      <div className="text-[11px] font-mono text-cyan-400/80 mt-0.5">
+                        Click to open centered digital signature capture pad
+                      </div>
+                    </div>
+                  </button>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-emerald-500/30 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Reference Signature Captured
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setIsRegSigModalOpen(true)}
+                          className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <Edit2 className="w-3 h-3" /> Re-Sign / Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRegSignaturePreview(null)}
+                          className="px-2 py-1 rounded text-[11px] font-mono text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" /> Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Large High-Contrast Preview Display */}
+                    <div className="h-28 w-full rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden p-2 shadow-inner">
+                      <img
+                        src={regSignaturePreview}
+                        alt="Signature Preview"
+                        className="max-h-full max-w-full object-contain filter brightness-125"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Centered Digital Signature Modal */}
+              <SignatureModal
+                isOpen={isRegSigModalOpen}
+                onClose={() => setIsRegSigModalOpen(false)}
+                candidateName={studentName || "New Candidate"}
+                rollId={studentRoll || "Pending Registration"}
+                initialSignature={regSignaturePreview}
+                onAcceptSignature={(dataUrl) => {
+                  setRegSignaturePreview(dataUrl);
+                  setIsRegSigModalOpen(false);
+                  addToast("✍️ Digital reference signature captured!", "success");
+                }}
+              />
+
+              {/* 3. Official Student ID Card (RFID Smart Card) Attachment */}
+              <div className="pt-1 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-semibold flex items-center gap-1.5">
+                    <Tablet className="w-3.5 h-3.5 text-cyber-cyan" />
+                    <span>Official Student ID Card (RFID)</span>
+                    <span className="text-rose-400 font-bold">*</span>
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    {isRfidHardwareConnected ? (
+                      <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        Hardware Reader Online
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
+                        Serial Standby / Test Mode
+                      </span>
+                    )}
+
+                    {studentRfidTag && !rfidDuplicateUser && (
+                      <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
+                        <CheckCircle2 className="w-3 h-3" /> Attached
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {!studentRfidTag ? (
+                  <div className="p-3.5 rounded-xl border-2 border-dashed border-cyan-500/40 bg-cyan-950/20 flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 flex-shrink-0 animate-pulse">
+                        <Tablet className="w-5 h-5" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                          Tap Student RFID ID Card on Reader
+                        </span>
+                        <span className="text-[11px] font-mono text-cyan-300/80">
+                          Automatic detection active. Place card near Arduino EM-18 / RC522 scanner.
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Manual / Simulated RFID Tag Input */}
+                    <div className="flex items-center gap-2 pt-2 border-t border-cyan-500/20">
+                      <input
+                        type="text"
+                        value={customRfidInput}
+                        onChange={(e) => setCustomRfidInput(e.target.value)}
+                        placeholder="Or enter RFID Tag manually e.g. 0015122682"
+                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-cyber-cyan"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (customRfidInput.trim()) {
+                              api.scanRFID(customRfidInput.trim()).then((res) => {
+                                const tag = customRfidInput.trim();
+                                const existing = users.find((u) => u.rfid_tag && u.rfid_tag.toLowerCase() === tag.toLowerCase());
+                                if (existing) {
+                                  setRfidDuplicateUser(existing);
+                                  addToast(`⚠️ RFID Card "${tag}" already assigned to ${existing.name}!`, "error");
+                                } else {
+                                  setRfidDuplicateUser(null);
+                                  setStudentRfidTag(tag);
+                                  addToast(`💳 RFID ID Card linked: ${tag}`, "success");
+                                }
+                              });
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!customRfidInput.trim()) return;
+                          const tag = customRfidInput.trim();
+                          api.scanRFID(tag).then(() => {
+                            const existing = users.find((u) => u.rfid_tag && u.rfid_tag.toLowerCase() === tag.toLowerCase());
+                            if (existing) {
+                              setRfidDuplicateUser(existing);
+                              addToast(`⚠️ RFID Card "${tag}" already assigned to ${existing.name}!`, "error");
+                            } else {
+                              setRfidDuplicateUser(null);
+                              setStudentRfidTag(tag);
+                              addToast(`💳 RFID ID Card linked: ${tag}`, "success");
+                            }
+                          });
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition"
+                      >
+                        Link Card
+                      </button>
+                    </div>
+
+                    {/* Quick Demo RFID presets */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] font-mono">
+                      <span className="text-slate-400">Quick Test Tap:</span>
+                      {["0015122682", "0005036860", "0015169233", "0015199821"].map((demoTag) => (
+                        <button
+                          key={demoTag}
+                          type="button"
+                          onClick={() => {
+                            api.scanRFID(demoTag);
+                            setCustomRfidInput(demoTag);
+                          }}
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-slate-700 hover:border-cyan-500/40 transition"
+                        >
+                          {demoTag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-emerald-500/40 flex items-center justify-between shadow-lg shadow-emerald-950/20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 flex-shrink-0">
+                        <Tablet className="w-5 h-5" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          ID Card Tag Linked
+                        </span>
+                        <span className="text-xs font-mono font-bold text-cyan-300">
+                          RFID UID: <strong className="text-emerald-300 tracking-wider">{studentRfidTag}</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStudentRfidTag("");
+                        setRfidDuplicateUser(null);
+                        setCustomRfidInput("");
+                        addToast("RFID ID Card unlinked", "info");
+                      }}
+                      className="px-2.5 py-1 rounded text-[11px] font-mono text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition cursor-pointer flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Re-Scan
+                    </button>
+                  </div>
+                )}
+
+                {/* Duplicate RFID Warning Banner */}
+                {rfidDuplicateUser && (
+                  <div className="p-3 rounded-xl bg-rose-950/80 border-2 border-rose-500 text-rose-200 flex items-start gap-2.5 animate-pulse text-xs">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-rose-100 font-bold block">⚠️ RFID Card Conflict:</strong>
+                      <span>
+                        This card is already registered to candidate <strong>{rfidDuplicateUser.name}</strong> (Roll ID: {rfidDuplicateUser.roll_id || "N/A"}). Please scan a unique student ID card.
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Duplicate Face Warning Banner */}
+              {duplicateWarning && (
+                <div className="p-3.5 rounded-xl bg-rose-950/70 border-2 border-rose-500/80 text-rose-200 flex items-start gap-3 shadow-[0_0_20px_rgba(244,63,94,0.3)] animate-pulse">
+                  <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-xs text-rose-100 flex items-center gap-1.5">
+                      ⚠️ Person Already Registered!
+                    </span>
+                    <p className="text-[11px] leading-relaxed text-rose-200/90">
+                      This face matches already registered candidate{" "}
+                      <strong className="text-white font-bold underline">{duplicateWarning.name}</strong>{" "}
+                      (ID / Roll: <span className="font-mono font-bold text-cyan-300">{duplicateWarning.roll_id || "N/A"}</span>, Dept: <span className="text-amber-300">{duplicateWarning.department || "N/A"}</span>) with <strong className="text-emerald-300">{duplicateWarning.confidence_percent}%</strong> similarity.
+                    </p>
+                    <span className="text-[10px] text-rose-300/80 italic mt-0.5">
+                      Duplicate face registration is blocked to prevent proxy profiles.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={isSubmittingStudent}
-                className="mt-3 w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 transition shadow-neon-cyan"
+                disabled={isSubmittingStudent || !!duplicateWarning || !!rfidDuplicateUser}
+                className={`mt-3 w-full py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-neon-cyan cursor-pointer transform hover:-translate-y-0.5 ${
+                  duplicateWarning || rfidDuplicateUser
+                    ? "bg-rose-950 text-rose-400 border border-rose-800 cursor-not-allowed opacity-80"
+                    : "bg-cyan-500 hover:bg-cyan-400 text-slate-950"
+                }`}
               >
-                <Upload className="w-4 h-4" /> Enroll Student Profile
+                {duplicateWarning ? (
+                  <>
+                    <AlertTriangle className="w-4 h-4" /> Registration Blocked (Already Registered Face)
+                  </>
+                ) : rfidDuplicateUser ? (
+                  <>
+                    <AlertTriangle className="w-4 h-4" /> Registration Blocked (Duplicate RFID Card)
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" /> Enroll Student Profile & Signature
+                  </>
+                )}
               </button>
             </form>
           </div>

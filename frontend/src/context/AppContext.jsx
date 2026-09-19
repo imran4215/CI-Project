@@ -10,9 +10,9 @@ export function AppProvider({ children }) {
   // Navigation
   const [activeTab, setActiveTab] = useState("attendance");
 
-  // System Settings
-  const [voiceAnnounce, setVoiceAnnounce] = useState(true);
-  const [audioBeep, setAudioBeep] = useState(true);
+  // System Settings (Default sound and voice announcements turned OFF)
+  const [voiceAnnounce, setVoiceAnnounce] = useState(false);
+  const [audioBeep, setAudioBeep] = useState(false);
   const [threshold, setThreshold] = useState(0.363);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [isMirrored, setIsMirrored] = useState(true);

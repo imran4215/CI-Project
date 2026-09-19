@@ -158,3 +158,37 @@ class FaceEngine:
             })
 
         return results
+
+    def find_matching_registered_user(
+        self,
+        query_embedding: np.ndarray,
+        threshold: Optional[float] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Checks if a given face embedding matches any user already registered in the system.
+        Returns the matched user details if similarity >= threshold, else None.
+        """
+        if threshold is None:
+            threshold = self.similarity_threshold
+
+        best_match_user = None
+        best_score = -1.0
+
+        for user in self.cached_users:
+            for emb in user["embeddings"]:
+                score = self.model_manager.compute_similarity(query_embedding, emb)
+                if score > best_score:
+                    best_score = score
+                    best_match_user = user
+
+        if best_match_user is not None and best_score >= threshold:
+            display_conf = round(75.0 + min(24.9, ((best_score - threshold) / (1.0 - threshold)) * 25.0), 1)
+            return {
+                "user_id": best_match_user["user_id"],
+                "name": best_match_user["name"],
+                "roll_id": best_match_user.get("roll_id", ""),
+                "department": best_match_user.get("department", ""),
+                "similarity_score": round(float(best_score), 4),
+                "confidence_percent": display_conf
+            }
+        return None

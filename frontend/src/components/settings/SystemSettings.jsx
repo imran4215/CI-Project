@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
-import { Settings, Sliders, Camera, Volume2, ShieldCheck } from "lucide-react";
+import { api } from "../../services/api";
+import { Settings, Sliders, Camera, Volume2, ShieldCheck, Radio } from "lucide-react";
 
 export function SystemSettings() {
   const {
@@ -147,6 +148,125 @@ export function SystemSettings() {
             </label>
           </div>
         </div>
+
+        {/* RFID Hardware Settings */}
+        <div className="glass-panel p-6 flex flex-col gap-4 border-sky-500/20 md:col-span-2">
+          <h3 className="font-bold text-sm text-white flex items-center gap-2 pb-3 border-b border-slate-800">
+            <Radio className="w-4 h-4 text-cyber-cyan" /> RFID Hardware Reader & COM Port
+          </h3>
+
+          <RFIDSettingsSection addToast={addToast} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RFIDSettingsSection({ addToast }) {
+  const [ports, setPorts] = useState([]);
+  const [selectedPort, setSelectedPort] = useState("AUTO");
+  const [baudRate, setBaudRate] = useState(9600);
+  const [status, setStatus] = useState({ is_connected: false, current_port: null });
+  const [loading, setLoading] = useState(false);
+
+  const fetchStatusAndPorts = async () => {
+    try {
+      const pRes = await api.getRFIDPorts();
+      setPorts(pRes.ports || []);
+
+      const sRes = await api.getLatestRFID();
+      setStatus({
+        is_connected: sRes.is_connected,
+        current_port: sRes.current_port,
+      });
+      if (sRes.current_port) setSelectedPort(sRes.current_port);
+    } catch (e) {
+      console.error("RFID status fetch error:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatusAndPorts();
+  }, []);
+
+  const handleSaveConfig = async () => {
+    setLoading(true);
+    try {
+      const res = await api.updateRFIDConfig({
+        port: selectedPort === "AUTO" ? null : selectedPort,
+        baud_rate: baudRate,
+      });
+      setStatus({
+        is_connected: res.is_connected,
+        current_port: res.current_port,
+      });
+      addToast(
+        res.is_connected
+          ? `✅ RFID Reader connected on ${res.current_port}`
+          : "⚠️ Port saved. Listening for RFID device...",
+        res.is_connected ? "success" : "info"
+      );
+    } catch (err) {
+      addToast(`Failed to update RFID config: ${err.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+      <div>
+        <label className="block text-slate-300 font-semibold mb-1">Serial COM Port</label>
+        <select
+          value={selectedPort}
+          onChange={(e) => setSelectedPort(e.target.value)}
+          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono focus:outline-none focus:border-cyber-cyan"
+        >
+          <option value="AUTO">Auto-Detect / USB Search</option>
+          {ports.map((p) => (
+            <option key={p.device} value={p.device}>
+              {p.device} - {p.description || "Serial Device"}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-slate-300 font-semibold mb-1">Baud Rate</label>
+        <select
+          value={baudRate}
+          onChange={(e) => setBaudRate(parseInt(e.target.value))}
+          className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono focus:outline-none focus:border-cyber-cyan"
+        >
+          <option value={9600}>9600 Baud (Standard)</option>
+          <option value={115200}>115200 Baud</option>
+          <option value={4800}>4800 Baud</option>
+        </select>
+      </div>
+
+      <div className="flex flex-col justify-end">
+        <button
+          type="button"
+          disabled={loading}
+          onClick={handleSaveConfig}
+          className="w-full py-2.5 px-4 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition flex items-center justify-center gap-2 cursor-pointer"
+        >
+          {loading ? "Connecting..." : "Connect / Save Port"}
+        </button>
+      </div>
+
+      <div className="sm:col-span-3 p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-slate-300 font-mono text-xs">
+        <div className="flex items-center gap-2">
+          <div className={`w-2.5 h-2.5 rounded-full ${status.is_connected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+          <span>Status: <strong>{status.is_connected ? `Connected (${status.current_port})` : "Disconnected / Software Mode"}</strong></span>
+        </div>
+        <button
+          type="button"
+          onClick={fetchStatusAndPorts}
+          className="text-cyan-400 hover:underline text-[11px]"
+        >
+          Refresh Ports
+        </button>
       </div>
     </div>
   );

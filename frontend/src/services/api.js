@@ -66,7 +66,17 @@ export const api = {
   // Candidates & Database
   getUsers: () => request("/api/users"),
   deleteUser: (userId) => request(`/api/users/${userId}`, { method: "DELETE" }),
+  validateAngle: (angleData) => request("/api/validate-angle", { method: "POST", body: JSON.stringify(angleData) }),
   registerCandidate: (formData) => request("/api/register", { method: "POST", body: formData }),
+  verifySignature: (candidateId, signatureB64, threshold = 0.50) =>
+    request("/api/signature/verify", {
+      method: "POST",
+      body: JSON.stringify({
+        candidate_id: candidateId,
+        signature: signatureB64,
+        threshold,
+      }),
+    }),
 
   // Live Frame Recognition
   recognizeFrame: (imageB64, threshold, activeRoomId) =>
@@ -78,6 +88,23 @@ export const api = {
         active_room_id: activeRoomId,
       }),
     }),
+
+  // RFID Smart Card Scanner & Hardware Engine
+  getLatestRFID: (maxAge = null) =>
+    request(`/api/rfid/latest${maxAge ? `?max_age=${encodeURIComponent(maxAge)}` : ""}`),
+  scanRFID: (tag) =>
+    request("/api/rfid/scan", { method: "POST", body: JSON.stringify({ tag }) }),
+  lookupRFID: (rfidTag, activeRoomId = "") =>
+    request(`/api/rfid/lookup/${encodeURIComponent(rfidTag)}${activeRoomId ? `?active_room_id=${encodeURIComponent(activeRoomId)}` : ""}`),
+  getRFIDPorts: () => request("/api/rfid/ports"),
+  updateRFIDConfig: (configData) =>
+    request("/api/rfid/config", { method: "POST", body: JSON.stringify(configData) }),
+  clearLatestRFID: () =>
+    request("/api/rfid/clear", { method: "POST" }),
+
+  // 3-Factor Biometric & RFID Verification (RFID + Face + Signature)
+  verify3FactorEntry: (data) =>
+    request("/api/attendance/verify-3factor", { method: "POST", body: JSON.stringify(data) }),
 
   // Continuous Exam Hall Surveillance & Active Presence Tracking
   processMonitoringFrame: (imageB64, threshold, activeRoomId) =>

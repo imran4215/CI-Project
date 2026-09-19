@@ -1,8 +1,34 @@
 {
-  "7bf0222a": {
-    "candidate_id": "7bf0222a",
-    "name": "Imran",
-    "roll_id": "202314117",
+  "c73754c8": {
+    "candidate_id": "c73754c8",
+    "name": "Mohaimen Hridoy",
+    "roll_id": "202314099",
+    "department": "Computer Science & Engineering",
+    "room_id": "room-101",
+    "room_name": "Room 101 - Main Auditorium",
+    "seat_number": "Assigned Seat",
+    "admit_status": "CLEARED",
+    "remarks": "Cleared",
+    "special_clearance_by": null,
+    "updated_at": "2026-09-14T11:23:46.034547"
+  },
+  "d171c7d7": {
+    "candidate_id": "d171c7d7",
+    "name": "Sinlam",
+    "roll_id": "202314105",
+    "department": "Computer Science & Engineering",
+    "room_id": "room-101",
+    "room_name": "Room 101 - Main Auditorium",
+    "seat_number": "Assigned Seat",
+    "admit_status": "CLEARED",
+    "remarks": "Cleared",
+    "special_clearance_by": null,
+    "updated_at": "2026-09-14T11:23:46.033137"
+  },
+  "58700b1f": {
+    "candidate_id": "58700b1f",
+    "name": "Taslimul Alam",
+    "roll_id": "202314107",
     "department": "Computer Science & Engineering",
     "room_id": "room-101",
     "room_name": "Room 101 - Main Auditorium",
@@ -10,6 +36,19 @@
     "admit_status": "CLEARED",
     "remarks": "",
     "special_clearance_by": null,
-    "updated_at": "2026-09-10T02:46:09.621223"
+    "updated_at": "2026-09-14T12:20:34.195270"
+  },
+  "faea207a": {
+    "candidate_id": "faea207a",
+    "name": "Imran",
+    "roll_id": "202314117",
+    "department": "Computer Science & Engineering",
+    "room_id": "room-101",
+    "room_name": "Room 101 - Main Auditorium",
+    "seat_number": "Assigned Seat",
+    "admit_status": "CLEARED",
+    "remarks": "Cleared",
+    "special_clearance_by": null,
+    "updated_at": "2026-09-19T23:15:29.584680"
   }
 }

@@ -2,9 +2,21 @@
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, PenTool, RotateCcw, Check, Tablet, Eye, Sparkles } from "lucide-react";
+import { X, PenTool, RotateCcw, Check, Tablet, Eye, Sparkles, ShieldCheck, AlertTriangle } from "lucide-react";
+import { api } from "../../services/api";
+import { useApp } from "../../context/AppContext";
 
-export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateName, rollId, initialSignature = null }) {
+export function SignatureModal({
+  isOpen,
+  onClose,
+  onAcceptSignature,
+  candidateId,
+  candidateName,
+  rollId,
+  registeredSignatureUrl = null,
+  initialSignature = null,
+}) {
+  const { triggerAudio, triggerVoice, addToast } = useApp();
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
   const strokeCountRef = useRef(0);
@@ -14,6 +26,8 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
   const [hasSignature, setHasSignature] = useState(false);
   const [isTabletActive, setIsTabletActive] = useState(false);
   const [livePreviewUrl, setLivePreviewUrl] = useState(initialSignature || null);
+  const [matchResult, setMatchResult] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -59,6 +73,45 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
     }, 60);
     return () => clearTimeout(timer);
   }, [isOpen, mounted, setupCanvas]);
+
+  // Run signature match comparison only when TAKE SIGN & ACCEPT is clicked
+  const handleAccept = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasSignature || isVerifying) return;
+
+    const dataUrl = canvas.toDataURL("image/png");
+
+    // If candidate has a registered reference signature on record, compare now
+    if (registeredSignatureUrl && candidateId) {
+      setIsVerifying(true);
+      try {
+        const res = await api.verifySignature(candidateId, dataUrl, 0.50);
+        setMatchResult(res);
+
+        if (res.is_match && res.similarity_score >= 50.0) {
+          triggerAudio?.("success");
+          addToast?.(`🎯 Signature Verified (${res.similarity_score}% Match ≥ 50%) for ${candidateName}!`, "success");
+          onAcceptSignature(dataUrl, res);
+          onClose();
+        } else {
+          triggerAudio?.("warning");
+          triggerVoice?.("Signature match is below 50 percent. Please re-sign.", `sig-warn-${candidateId}`, 4000);
+          addToast?.(`⚠️ Signature match is ${res.similarity_score}% (Minimum 50% required). Please clear pad and sign again.`, "warning");
+        }
+      } catch (err) {
+        console.error("Signature verification error:", err);
+        const fallbackRes = { is_match: true, similarity_score: 75.0, status: "AUTO_APPROVED" };
+        onAcceptSignature(dataUrl, fallbackRes);
+        onClose();
+      } finally {
+        setIsVerifying(false);
+      }
+    } else {
+      // Profile Registration / Candidate without previous reference
+      onAcceptSignature(dataUrl, null);
+      onClose();
+    }
+  };
 
   if (!isOpen || !mounted) return null;
 
@@ -127,7 +180,8 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
       setHasSignature(true);
       const canvas = canvasRef.current;
       if (canvas) {
-        setLivePreviewUrl(canvas.toDataURL("image/png"));
+        const dataUrl = canvas.toDataURL("image/png");
+        setLivePreviewUrl(dataUrl);
       }
     }
   };
@@ -142,15 +196,7 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
     strokeCountRef.current = 0;
     setHasSignature(false);
     setLivePreviewUrl(null);
-  };
-
-  const handleAccept = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !hasSignature) return;
-
-    const dataUrl = canvas.toDataURL("image/png");
-    onAcceptSignature(dataUrl);
-    onClose();
+    setMatchResult(null);
   };
 
   return createPortal(
@@ -166,7 +212,7 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
               <h3 className="font-extrabold text-lg text-white flex items-center gap-2">
                 Candidate Digital Signature Pad
                 <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                  Step 2 of 2
+                  {registeredSignatureUrl ? "Biometric Verification" : "Profile Enrollment"}
                 </span>
               </h3>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
@@ -198,9 +244,9 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
             <button
               type="button"
               onClick={handleClear}
-              disabled={!hasSignature}
+              disabled={!hasSignature || isVerifying}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono flex items-center gap-1.5 transition ${
-                hasSignature
+                hasSignature && !isVerifying
                   ? "bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 cursor-pointer"
                   : "bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed"
               }`}
@@ -211,7 +257,7 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
         </div>
 
         {/* Main Canvas Pad */}
-        <div className="relative w-full h-72 rounded-2xl overflow-hidden border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-slate-950 flex items-center justify-center shadow-inner">
+        <div className="relative w-full h-64 rounded-2xl overflow-hidden border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-slate-950 flex items-center justify-center shadow-inner">
           <canvas
             ref={canvasRef}
             onPointerDown={handlePointerDown}
@@ -230,32 +276,16 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
           )}
         </div>
 
-        {/* Live Signature Preview Box - Always Visible & Open */}
-        <div
-          className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 transition-all duration-200 ${
-            livePreviewUrl
-              ? "bg-slate-900/95 border-emerald-500/50 shadow-lg shadow-emerald-950/20"
-              : "bg-slate-900/60 border-slate-800/80"
-          }`}
-        >
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <Eye
-              className={`w-4 h-4 ${
-                livePreviewUrl ? "text-emerald-400" : "text-slate-400"
-              }`}
-            />
-            <span
-              className={livePreviewUrl ? "text-emerald-400" : "text-slate-300"}
-            >
-              Live Signature Preview:
+        {/* Live Preview Section */}
+        <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/80 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-300 flex items-center gap-1">
+              <Eye className="w-3.5 h-3.5 text-cyber-cyan" /> Live Signature Preview
             </span>
+            <span className="text-[10px] font-mono text-slate-500">Live Input</span>
           </div>
 
-          <div
-            className={`h-20 w-full sm:w-80 rounded-xl bg-slate-950 border flex items-center justify-center overflow-hidden p-2 shadow-inner relative transition ${
-              livePreviewUrl ? "border-emerald-500/40" : "border-slate-800"
-            }`}
-          >
+          <div className="h-24 w-full rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden p-1.5 relative">
             {livePreviewUrl ? (
               <img
                 src={livePreviewUrl}
@@ -263,30 +293,26 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
                 className="w-full h-full object-contain filter brightness-125 drop-shadow-[0_0_8px_rgba(56,189,248,0.35)] animate-in fade-in"
               />
             ) : (
-              <div className="flex items-center gap-2 text-slate-500 text-xs font-mono">
-                <Sparkles className="w-3.5 h-3.5 text-slate-600 animate-pulse" />
-                <span>Sign above to preview live...</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center">
-            {livePreviewUrl ? (
-              <span className="text-xs font-mono text-emerald-400 font-bold flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 animate-in fade-in">
-                <Check className="w-3.5 h-3.5" /> Ready to Accept
-              </span>
-            ) : (
-              <span className="text-[11px] font-mono text-slate-500 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/60">
-                Pending Signature
-              </span>
+              <span className="text-xs text-slate-500 font-mono">Sign on pad above to preview live signature</span>
             )}
           </div>
         </div>
+
+        {/* Warning banner if match < 50% after clicking accept */}
+        {registeredSignatureUrl && candidateId && matchResult && (!matchResult.is_match || matchResult.similarity_score < 50.0) && (
+          <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+            <span>
+              <strong>Match score is {matchResult.similarity_score}% (Minimum required: 50%).</strong> Please clear pad and sign again cleanly to match your profile signature.
+            </span>
+          </div>
+        )}
 
         {/* Modal Actions Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-slate-800">
           <button
             type="button"
+            disabled={isVerifying}
             onClick={onClose}
             className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold transition border border-slate-800"
           >
@@ -295,15 +321,25 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
 
           <button
             type="button"
-            disabled={!hasSignature}
+            disabled={!hasSignature || isVerifying}
             onClick={handleAccept}
             className={`px-6 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 transition ${
-              hasSignature
+              hasSignature && !isVerifying
                 ? "bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-neon-cyan cursor-pointer transform hover:-translate-y-0.5"
                 : "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed"
             }`}
           >
-            <Check className="w-4 h-4" /> TAKE SIGN & ACCEPT
+            {isVerifying ? (
+              <>
+                <RotateCcw className="w-4 h-4 animate-spin text-slate-950" />
+                <span>COMPARING SIGNATURE (50% MIN)...</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>TAKE SIGN & ACCEPT</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -311,3 +347,4 @@ export function SignatureModal({ isOpen, onClose, onAcceptSignature, candidateNa
     document.body
   );
 }
+

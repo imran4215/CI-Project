@@ -503,6 +503,7 @@ export function ContinuousMonitor() {
               ) : (
                 monitoringData.roster.map((cand) => {
                   const isMissing = cand.monitoring_status === "MISSING";
+                  const isReturning = cand.monitoring_status === "RETURNING" || cand.is_verifying_return;
                   const isWriting = cand.monitoring_status === "WRITING" || cand.is_writing;
                   const isGrace = cand.monitoring_status === "GRACE_PERIOD";
                   const isWashroom = cand.monitoring_status === "WASHROOM";
@@ -516,6 +517,10 @@ export function ContinuousMonitor() {
                     cardBorder = "border-rose-500/80 bg-rose-950/30 shadow-[0_0_15px_rgba(244,63,94,0.3)] animate-pulse";
                     statusBadge = "bg-rose-500/30 text-rose-300 border-rose-500/80 font-bold";
                     statusText = `🚨 MISSING (${cand.last_seen_seconds_ago}s)`;
+                  } else if (isReturning) {
+                    cardBorder = "border-emerald-500/80 bg-emerald-950/20 shadow-[0_0_12px_rgba(16,185,129,0.25)] animate-pulse";
+                    statusBadge = "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-semibold";
+                    statusText = `🟢 Verifying Return (${Math.round(cand.stable_seen_sec || 0)}s/5s)`;
                   } else if (isWriting) {
                     cardBorder = "border-sky-500/40 bg-sky-950/20";
                     statusBadge = "bg-sky-500/20 text-sky-300 border-sky-500/40";
@@ -572,7 +577,19 @@ export function ContinuousMonitor() {
                         <div className="flex items-center gap-1">
                           <span>Last Seen:</span>
                           <span className="text-slate-300">
-                            {cand.last_seen_seconds_ago === 0 ? "Live" : `${cand.last_seen_seconds_ago}s ago`}
+                            {isReturning ? (
+                              <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                                Verifying ({Math.round(cand.stable_seen_sec || 0)}s/5s)
+                              </span>
+                            ) : cand.last_seen_seconds_ago === 0 ? (
+                              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                                Live
+                              </span>
+                            ) : (
+                              `${cand.last_seen_seconds_ago}s ago`
+                            )}
                           </span>
                         </div>
                       </div>

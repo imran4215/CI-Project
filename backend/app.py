@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 from .face_engine import FaceEngine
 from .database import FaceDatabase, FACES_DIR, ATTENDANCE_DIR
+from .signature_engine import SignatureEngine
+from .rfid_engine import RFIDEngine
 
 app = FastAPI(title="RFID & Face Attendance & Anti-Proxy System", version="3.0.0")
 
@@ -25,6 +27,8 @@ app.add_middleware(
 
 engine = FaceEngine()
 db = FaceDatabase()
+sig_engine = SignatureEngine()
+rfid_engine = RFIDEngine()
 
 def decode_base64_image(base64_str: str) -> Optional[np.ndarray]:
     try:
@@ -55,7 +59,30 @@ class RegisterUserRequest(BaseModel):
     name: str
     roll_id: Optional[str] = ""
     department: Optional[str] = ""
+    rfid_tag: Optional[str] = None
     angles: Dict[str, str]
+    signature: Optional[str] = None  # Base64 digital reference signature
+
+class RFIDScanRequest(BaseModel):
+    tag: str
+
+class RFIDConfigRequest(BaseModel):
+    port: str
+    baud_rate: Optional[int] = 9600
+
+class Verify3FactorRequest(BaseModel):
+    rfid_tag: str
+    candidate_id: str
+    signature: Optional[str] = None
+    face_image: Optional[str] = None
+    active_room_id: Optional[str] = None
+    signature_threshold: Optional[float] = 0.50
+    face_threshold: Optional[float] = 0.363
+
+class VerifySignatureRequest(BaseModel):
+    candidate_id: str
+    signature: str  # Base64 live signature from tablet
+    threshold: Optional[float] = 0.50
 
 class RecognizeRequest(BaseModel):
     image: str
@@ -193,13 +220,19 @@ async def validate_angle(req: ValidateAngleRequest):
         raise HTTPException(status_code=400, detail="Invalid image data")
 
     res = engine.validate_and_extract_face(img, min_confidence=0.55)
+    matched_user = None
+    if res.get("success") and res.get("embedding") is not None:
+        matched_user = engine.find_matching_registered_user(res["embedding"])
+
     res_clean = {
         "success": res["success"],
         "message": res["message"],
         "confidence": res.get("confidence", 0.0),
         "bbox": res.get("bbox"),
         "landmarks": res.get("landmarks"),
-        "angle": req.angle
+        "angle": req.angle,
+        "is_already_registered": matched_user is not None,
+        "matched_user": matched_user
     }
     return res_clean
 
@@ -210,16 +243,26 @@ async def register_user(request: Request):
     name = ""
     roll_id = ""
     department = ""
+    rfid_tag = ""
     angles_bytes = {}
+    signature_bytes = None
 
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
         form = await request.form()
         name = str(form.get("name", "")).strip()
         roll_id = str(form.get("roll_id", "")).strip()
         department = str(form.get("department", "")).strip()
+        rfid_tag = str(form.get("rfid_tag", "")).strip()
 
         for key, value in form.items():
-            if key not in ["name", "roll_id", "department"] and hasattr(value, "read"):
+            if key == "signature":
+                if hasattr(value, "read"):
+                    sig_b = await value.read()
+                    if sig_b:
+                        signature_bytes = sig_b
+                elif isinstance(value, str) and value.strip():
+                    signature_bytes = decode_base64_bytes(value)
+            elif key not in ["name", "roll_id", "department", "rfid_tag"] and hasattr(value, "read"):
                 img_bytes = await value.read()
                 if img_bytes:
                     angles_bytes[key] = img_bytes
@@ -228,6 +271,7 @@ async def register_user(request: Request):
         name = str(body.get("name", "")).strip()
         roll_id = str(body.get("roll_id", "")).strip()
         department = str(body.get("department", "")).strip()
+        rfid_tag = str(body.get("rfid_tag", "")).strip()
         raw_angles = body.get("angles", {})
 
         for angle_name, b64_img in raw_angles.items():
@@ -235,11 +279,39 @@ async def register_user(request: Request):
             if b_bytes:
                 angles_bytes[angle_name] = b_bytes
 
+        raw_sig = body.get("signature")
+        if raw_sig:
+            signature_bytes = decode_base64_bytes(raw_sig)
+
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
 
     if not angles_bytes:
         raise HTTPException(status_code=400, detail="At least 1 clear face photo is required")
+
+    if not signature_bytes or len(signature_bytes) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Official digital reference signature is required for candidate enrollment."
+        )
+
+    # 1. Check if Roll ID is already assigned to another candidate
+    if roll_id:
+        existing_roll = db.find_user_by_roll(roll_id)
+        if existing_roll:
+            raise HTTPException(
+                status_code=400,
+                detail=f"⚠️ Student ID / Roll '{roll_id}' is already registered for '{existing_roll['name']}' ({existing_roll.get('department', 'General')})."
+            )
+
+    # 2. Check if RFID Card Tag is already assigned to another candidate
+    if rfid_tag:
+        existing_rfid = db.find_user_by_rfid(rfid_tag)
+        if existing_rfid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"⚠️ RFID Card Tag '{rfid_tag}' is already registered to '{existing_rfid['name']}' (ID: {existing_rfid.get('roll_id', 'N/A')})."
+            )
 
     saved_images_bytes = {}
     saved_embeddings = {}
@@ -252,6 +324,13 @@ async def register_user(request: Request):
 
         val = engine.validate_and_extract_face(img, min_confidence=0.45)
         if val["success"] and val["embedding"] is not None:
+            # 3. Check if this face matches any already registered candidate
+            matched_user = engine.find_matching_registered_user(val["embedding"])
+            if matched_user:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"⚠️ This person's face is already registered as '{matched_user['name']}' (Roll ID: {matched_user['roll_id'] or 'N/A'}, Dept: {matched_user['department'] or 'General'}) with {matched_user['confidence_percent']}% biometric match."
+                )
             saved_images_bytes[angle_name] = img_bytes
             saved_embeddings[angle_name] = val["embedding"]
 
@@ -265,17 +344,205 @@ async def register_user(request: Request):
         name=name,
         roll_id=roll_id,
         department=department,
+        rfid_tag=rfid_tag,
         angle_images=saved_images_bytes,
-        angle_embeddings=saved_embeddings
+        angle_embeddings=saved_embeddings,
+        signature_bytes=signature_bytes
     )
 
     engine.reload_cache()
 
     return {
         "success": True,
-        "message": f"Successfully registered candidate {name} to the universal database.",
+        "message": f"Successfully registered candidate {name} to the universal database with RFID Tag: {rfid_tag or 'None'}.",
         "user": user_record
     }
+
+# =============================================================================
+# 1.2. RFID Smart Card Scanner & Hardware Engine API
+# =============================================================================
+@app.get("/api/rfid/latest")
+def get_latest_rfid(max_age: Optional[float] = Query(None, description="Max age in seconds for scan recency")):
+    scan = rfid_engine.get_latest_scan(max_age_seconds=max_age)
+    if scan:
+        user = db.find_user_by_rfid(scan["tag"])
+        reg_photo = list(user.get("images", {}).values())[0] if user and user.get("images") else None
+        return {
+            "scanned": True,
+            "scan": scan,
+            "is_registered": user is not None,
+            "user": user,
+            "registered_photo": f"/api/{reg_photo}" if reg_photo else None,
+            "is_connected": rfid_engine.is_connected()
+        }
+    return {
+        "scanned": False,
+        "scan": None,
+        "is_connected": rfid_engine.is_connected(),
+        "port": rfid_engine.com_port
+    }
+
+@app.post("/api/rfid/scan")
+def trigger_rfid_scan(req: RFIDScanRequest):
+    scan = rfid_engine.manual_scan(req.tag)
+    user = db.find_user_by_rfid(scan["tag"])
+    reg_photo = list(user.get("images", {}).values())[0] if user and user.get("images") else None
+    return {
+        "success": True,
+        "scan": scan,
+        "is_registered": user is not None,
+        "user": user,
+        "registered_photo": f"/api/{reg_photo}" if reg_photo else None
+    }
+
+@app.get("/api/rfid/lookup/{rfid_tag}")
+def lookup_rfid_candidate(rfid_tag: str, active_room_id: Optional[str] = None):
+    clean_tag = rfid_tag.strip()
+    user = db.find_user_by_rfid(clean_tag)
+    if not user:
+        return {
+            "success": False,
+            "registered": False,
+            "message": f"RFID Tag '{clean_tag}' is not registered in the university system.",
+            "candidate": None
+        }
+
+    status_info = db.get_candidate_status(user["id"], active_room_id=active_room_id)
+    reg_photo = list(user.get("images", {}).values())[0] if user.get("images") else None
+    reg_sig = db.get_candidate_signature_path(user["id"])
+
+    return {
+        "success": True,
+        "registered": True,
+        "candidate": user,
+        "status_info": status_info,
+        "registered_photo": f"/api/{reg_photo}" if reg_photo else None,
+        "registered_signature": f"/api/{reg_sig}" if reg_sig else None
+    }
+
+@app.get("/api/rfid/ports")
+def get_rfid_ports():
+    return {
+        "ports": rfid_engine.list_ports(),
+        "current_port": rfid_engine.com_port,
+        "baud_rate": rfid_engine.baud_rate,
+        "is_connected": rfid_engine.is_connected()
+    }
+
+@app.post("/api/rfid/config")
+def set_rfid_config(req: RFIDConfigRequest):
+    res = rfid_engine.configure(port=req.port, baud_rate=req.baud_rate or 9600)
+    return res
+
+@app.post("/api/rfid/clear")
+def clear_rfid_scan():
+    rfid_engine.clear_latest_scan()
+    return {"success": True}
+
+# =============================================================================
+# 1.3. 3-Factor Biometric & RFID Verification (RFID + Face + Signature)
+# =============================================================================
+@app.post("/api/attendance/verify-3factor")
+def verify_three_factor_entry(req: Verify3FactorRequest):
+    """
+    Validates complete 3-Factor Exam Entrance:
+    1. RFID Card matches registered candidate C.
+    2. candidate_id matches C.
+    3. Face image matches C (if face_image provided).
+    4. Digital signature matches C's reference signature (>= 50%).
+    """
+    # Factor 1: RFID Match
+    rfid_user = db.find_user_by_rfid(req.rfid_tag)
+    if not rfid_user:
+        raise HTTPException(
+            status_code=400,
+            detail=f"❌ RFID Mismatch: Tag '{req.rfid_tag}' is not registered in the system."
+        )
+
+    if rfid_user["id"] != req.candidate_id:
+        cand_user = db.get_user(req.candidate_id)
+        cand_name = cand_user["name"] if cand_user else req.candidate_id
+        raise HTTPException(
+            status_code=400,
+            detail=f"❌ Identity Mismatch: Scanned RFID card belongs to '{rfid_user['name']}' (ID: {rfid_user.get('roll_id', 'N/A')}), but selected candidate is '{cand_name}'!"
+        )
+
+    # Factor 2: Face Recognition Match (if live face snapshot provided)
+    face_score = 1.0
+    if req.face_image:
+        face_img = decode_base64_image(req.face_image)
+        if face_img is not None:
+            face_val = engine.validate_and_extract_face(face_img, min_confidence=0.45)
+            if face_val["success"] and face_val.get("embedding") is not None:
+                matched_user = engine.find_matching_registered_user(face_val["embedding"], threshold=req.face_threshold or 0.363)
+                if not matched_user or matched_user["user_id"] != rfid_user["id"]:
+                    detected_name = matched_user["name"] if matched_user else "Unknown Person"
+                    # Log security proxy alert
+                    db.log_proxy_alert(
+                        snapshot_bytes=decode_base64_bytes(req.face_image) or b"",
+                        confidence=0.95,
+                        notes=f"🚨 3-Factor Biometric Mismatch: Face '{detected_name}' does not match RFID Card holder '{rfid_user['name']}' ({rfid_user.get('roll_id', '')})."
+                    )
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"❌ Biometric Face Mismatch: Detected face ({detected_name}) does NOT match RFID Card holder '{rfid_user['name']}' ({rfid_user.get('roll_id', 'N/A')})!"
+                    )
+
+    # Factor 3: Signature Verification
+    sig_result = None
+    if req.signature:
+        reg_bytes = db.get_candidate_signature_bytes(rfid_user["id"])
+        sig_bytes = decode_base64_bytes(req.signature)
+        if not sig_bytes:
+            raise HTTPException(status_code=400, detail="❌ Signature data is missing or invalid.")
+        
+        sig_result = sig_engine.verify_signature(
+            candidate_id=rfid_user["id"],
+            live_bytes=sig_bytes,
+            registered_bytes=reg_bytes,
+            threshold=req.signature_threshold or 0.50
+        )
+
+        if not sig_result["verified"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"❌ Digital Signature Mismatch: Match score is {sig_result['similarity_percent']}% (Minimum {int(sig_result['threshold']*100)}% required). Please sign again carefully."
+            )
+
+    return {
+        "success": True,
+        "verified": True,
+        "candidate": rfid_user,
+        "rfid_tag": req.rfid_tag,
+        "signature_verification": sig_result,
+        "message": f"✅ All 3 Factors (RFID + Face + Signature) verified successfully for {rfid_user['name']}!"
+    }
+
+# =============================================================================
+# 1.5. Biometric Digital Signature Matcher & Verification
+# =============================================================================
+@app.post("/api/signature/verify")
+async def verify_signature(req: VerifySignatureRequest):
+    user = db.get_user(req.candidate_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    live_bytes = decode_base64_bytes(req.signature)
+    if not live_bytes:
+        raise HTTPException(status_code=400, detail="Invalid live signature data")
+
+    reg_bytes = db.get_candidate_signature_bytes(req.candidate_id)
+    result = sig_engine.compare_signatures(
+        registered_bytes=reg_bytes,
+        live_bytes=live_bytes,
+        threshold=req.threshold or 0.50
+    )
+
+    reg_path = db.get_candidate_signature_path(req.candidate_id)
+    result["registered_signature_url"] = f"/api/{reg_path}" if reg_path else None
+    result["candidate_id"] = req.candidate_id
+    result["candidate_name"] = user.get("name", "")
+    return result
 
 # =============================================================================
 # 2. Real-Time Room-Aware Recognition
@@ -288,7 +555,7 @@ async def recognize(req: RecognizeRequest):
 
     results = engine.recognize_frame(img, threshold=req.threshold)
 
-    # Evaluate Room Allocation, Schedule, and Admit Card Status for each detected face
+    # Evaluate Room Allocation, Schedule, Admit Card Status & Registered Signature for each detected face
     for face in results:
         if face["is_recognized"] and face.get("user_id"):
             status_info = db.get_candidate_status(face["user_id"], active_room_id=req.active_room_id)
@@ -304,11 +571,15 @@ async def recognize(req: RecognizeRequest):
             face["allowed_departments"] = status_info.get("allowed_departments")
             face["candidate_department"] = status_info.get("candidate_department")
             face["schedule_end_time"] = status_info.get("schedule_end_time")
+            
+            sig_path = db.get_candidate_signature_path(face["user_id"])
+            face["registered_signature"] = f"/api/{sig_path}" if sig_path else None
         else:
             face["attendance_status"] = "UNREGISTERED"
             face["allocation"] = None
             face["attendance_record"] = None
             face["schedule"] = None
+            face["registered_signature"] = None
 
     return {
         "success": True,

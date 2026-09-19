@@ -140,7 +140,7 @@ class FaceDatabase:
             "absence_threshold_sec": 45,
             "gate_arrival_threshold_sec": 300,
             "grace_period_sec": 12,
-            "auto_alert_voice": True
+            "auto_alert_voice": False
         }
         self._load()
 
@@ -277,8 +277,10 @@ class FaceDatabase:
         name: str,
         roll_id: str = "",
         department: str = "",
+        rfid_tag: Optional[str] = None,
         angle_images: Optional[Dict[str, bytes]] = None,
-        angle_embeddings: Optional[Dict[str, np.ndarray]] = None
+        angle_embeddings: Optional[Dict[str, np.ndarray]] = None,
+        signature_bytes: Optional[bytes] = None
     ) -> Dict[str, Any]:
         user_id = str(uuid.uuid4())[:8]
         user_dir = os.path.join(self.faces_dir, user_id)
@@ -297,13 +299,25 @@ class FaceDatabase:
             emb_dict = {k: np.array(v, dtype=np.float32) for k, v in angle_embeddings.items()}
             np.savez_compressed(os.path.join(user_dir, "embeddings.npz"), **emb_dict)
 
+        saved_signature = None
+        if signature_bytes and len(signature_bytes) > 0:
+            sig_filename = "signature.png"
+            sig_path = os.path.join(user_dir, sig_filename)
+            with open(sig_path, "wb") as f:
+                f.write(signature_bytes)
+            saved_signature = f"faces/{user_id}/{sig_filename}"
+
+        clean_rfid = rfid_tag.strip() if rfid_tag and rfid_tag.strip() else None
+
         user_record = {
             "id": user_id,
             "name": name.strip(),
             "roll_id": roll_id.strip(),
             "department": department.strip(),
+            "rfid_tag": clean_rfid,
             "created_at": datetime.now().isoformat(),
             "images": saved_images,
+            "signature": saved_signature,
             "angle_count": len(angle_embeddings) if angle_embeddings else 0
         }
 
@@ -323,6 +337,63 @@ class FaceDatabase:
         )
 
         return user_record
+
+    def find_user_by_roll(self, roll_id: str) -> Optional[Dict[str, Any]]:
+        """Finds a registered student by their Roll ID / Student ID."""
+        if not roll_id:
+            return None
+        clean_roll = roll_id.strip().lower()
+        for u in self.db["users"].values():
+            if u.get("roll_id", "").strip().lower() == clean_roll:
+                return u
+        return None
+
+    def find_user_by_rfid(self, rfid_tag: str) -> Optional[Dict[str, Any]]:
+        """Finds a registered student by their RFID Card Tag UID."""
+        if not rfid_tag:
+            return None
+        clean_tag = rfid_tag.strip().lower()
+        for u in self.db["users"].values():
+            u_tag = str(u.get("rfid_tag", "") or "").strip().lower()
+            if u_tag and u_tag == clean_tag:
+                return u
+        return None
+
+    def update_user_rfid(self, user_id: str, rfid_tag: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Updates the RFID tag assigned to a candidate profile."""
+        if user_id not in self.db.get("users", {}):
+            return None
+        clean_tag = rfid_tag.strip() if rfid_tag and rfid_tag.strip() else None
+        self.db["users"][user_id]["rfid_tag"] = clean_tag
+        self._save()
+        return self.db["users"][user_id]
+
+    def get_candidate_signature_path(self, candidate_id: str) -> Optional[str]:
+        """Returns relative path to registered signature e.g. faces/{user_id}/signature.png if exists."""
+        user = self.get_user(candidate_id)
+        if not user:
+            return None
+        sig_rel = user.get("signature")
+        if sig_rel:
+            full_path = os.path.join(self.data_dir, sig_rel.replace("/", os.sep))
+            if os.path.exists(full_path):
+                return sig_rel
+        # Fallback check on disk
+        disk_sig = os.path.join(self.faces_dir, candidate_id, "signature.png")
+        if os.path.exists(disk_sig):
+            return f"faces/{candidate_id}/signature.png"
+        return None
+
+    def get_candidate_signature_bytes(self, candidate_id: str) -> Optional[bytes]:
+        """Loads registered signature bytes from disk."""
+        disk_sig = os.path.join(self.faces_dir, candidate_id, "signature.png")
+        if os.path.exists(disk_sig):
+            try:
+                with open(disk_sig, "rb") as f:
+                    return f.read()
+            except Exception:
+                return None
+        return None
 
     def get_users(self) -> List[Dict[str, Any]]:
         return list(self.db.get("users", {}).values())
@@ -1828,41 +1899,128 @@ class FaceDatabase:
             # Status is INSIDE:
             if cand_id in detected_user_map:
                 face_info = detected_user_map[cand_id]
-                cand_track["has_been_seen_at_desk"] = True
 
-                # If candidate was previously recorded as missing/away, close the absence event
-                if cand_track.get("current_open_absence"):
-                    open_ev = cand_track["current_open_absence"]
-                    open_ev["return_time"] = now_time
-                    open_ev["return_iso"] = now_iso
-                    try:
-                        out_dt = datetime.fromisoformat(open_ev["out_iso"])
-                        dur_sec = max(0, int((now - out_dt).total_seconds()))
-                    except Exception:
-                        dur_sec = open_ev.get("duration_sec", 0)
-                    open_ev["duration_sec"] = dur_sec
-                    open_ev["duration_formatted"] = f"{dur_sec // 60}m {dur_sec % 60}s" if dur_sec >= 60 else f"{dur_sec}s"
-                    open_ev["status"] = "RETURNED"
-                    cand_track["current_open_absence"] = None
+                # Check if candidate is returning from an absence / away state
+                last_seen_dt = cand_track.get("last_seen_dt", now)
+                elapsed_since_last_seen = max(0.0, (now - last_seen_dt).total_seconds())
 
-                cand_track["last_seen_dt"] = now
-                cand_track["last_seen_iso"] = now_iso
-                cand_track["last_seen_time"] = now_time
-                cand_track["posture"] = face_info.get("posture", "ATTENTIVE")
-                cand_track["posture_label"] = face_info.get("posture_label", "Attentive")
-                cand_track["is_writing"] = face_info.get("is_writing", False)
-                cand_track["pitch_score"] = face_info.get("pitch_score", 0.0)
-                cand_track["seen_checks"] += 1
-                if cand_track["is_writing"]:
-                    cand_track["writing_checks"] += 1
-                    cand_track["monitoring_status"] = "WRITING"
+                was_away = (
+                    cand_track.get("current_open_absence") is not None
+                    or cand_track.get("is_verifying_return", False)
+                    or cand_track.get("return_start_dt") is not None
+                    or cand_track.get("monitoring_status") in ["MISSING", "GRACE_PERIOD", "WASHROOM", "EXITED", "RETURNING"]
+                    or cand_track.get("missing_duration_sec", 0) > 1.5
+                    or not cand_track.get("has_been_seen_at_desk", False)
+                )
+
+                if was_away:
+                    # Candidate was away and is now in front of camera
+                    if cand_track.get("return_start_dt") is None:
+                        # First frame of return detection: record the exact timestamp they returned to desk
+                        cand_track["return_start_dt"] = now
+                        cand_track["return_start_iso"] = now_iso
+                        cand_track["return_start_time"] = now_time
+                        cand_track["is_verifying_return"] = True
+                        cand_track["stable_seen_sec"] = 0
+
+                    # Calculate how long candidate has been stably seen continuously
+                    stable_seen_sec = max(0.0, (now - cand_track["return_start_dt"]).total_seconds())
+
+                    # Require at least 5.0 seconds of continuous stable presence
+                    if stable_seen_sec < 5.0:
+                        # Still in the 5-second verification window
+                        cand_track["monitoring_status"] = "RETURNING"
+                        cand_track["posture_label"] = f"🟢 Verifying Return ({int(stable_seen_sec)}s/5s)"
+                        cand_track["stable_seen_sec"] = round(stable_seen_sec, 1)
+                        cand_track["is_verifying_return"] = True
+                        cand_track["posture"] = face_info.get("posture", "ATTENTIVE")
+                        cand_track["is_writing"] = face_info.get("is_writing", False)
+                        cand_track["seen_checks"] += 1
+
+                        # Keep missing duration > 0 so it does not say "Live" until 5s are completed
+                        cand_track["missing_duration_sec"] = round(max(1.0, (now - last_seen_dt).total_seconds()), 1)
+
+                        # Keep absence duration frozen to the return moment (excluding ongoing 5s verification)
+                        if cand_track.get("current_open_absence"):
+                            open_ev = cand_track["current_open_absence"]
+                            try:
+                                out_dt = datetime.fromisoformat(open_ev["out_iso"])
+                                dur_sec = max(0, int((cand_track["return_start_dt"] - out_dt).total_seconds()))
+                            except Exception:
+                                dur_sec = open_ev.get("duration_sec", 0)
+                            open_ev["duration_sec"] = dur_sec
+                            open_ev["duration_formatted"] = f"{dur_sec // 60}m {dur_sec % 60}s" if dur_sec >= 60 else f"{dur_sec}s"
+                    else:
+                        # 5 SECONDS OF STABLE PRESENCE CONFIRMED!
+                        cand_track["has_been_seen_at_desk"] = True
+                        # Close the open absence event officially
+                        if cand_track.get("current_open_absence"):
+                            open_ev = cand_track["current_open_absence"]
+                            open_ev["return_time"] = cand_track["return_start_time"]
+                            open_ev["return_iso"] = cand_track["return_start_iso"]
+                            try:
+                                out_dt = datetime.fromisoformat(open_ev["out_iso"])
+                                # Exclude the 5-second return verification window from absence duration
+                                dur_sec = max(0, int((cand_track["return_start_dt"] - out_dt).total_seconds()))
+                            except Exception:
+                                dur_sec = open_ev.get("duration_sec", 0)
+                            open_ev["duration_sec"] = dur_sec
+                            open_ev["duration_formatted"] = f"{dur_sec // 60}m {dur_sec % 60}s" if dur_sec >= 60 else f"{dur_sec}s"
+                            open_ev["status"] = "RETURNED"
+                            cand_track["current_open_absence"] = None
+
+                        # Reset return verification trackers
+                        cand_track["return_start_dt"] = None
+                        cand_track["return_start_iso"] = None
+                        cand_track["return_start_time"] = None
+                        cand_track["is_verifying_return"] = False
+                        cand_track["stable_seen_sec"] = 0
+                        cand_track["missing_alert_sent"] = False
+                        cand_track["missing_duration_sec"] = 0
+
+                        # Mark present / writing and NOW update last seen to LIVE
+                        cand_track["last_seen_dt"] = now
+                        cand_track["last_seen_iso"] = now_iso
+                        cand_track["last_seen_time"] = now_time
+                        cand_track["posture"] = face_info.get("posture", "ATTENTIVE")
+                        cand_track["posture_label"] = face_info.get("posture_label", "Attentive")
+                        cand_track["is_writing"] = face_info.get("is_writing", False)
+                        cand_track["pitch_score"] = face_info.get("pitch_score", 0.0)
+                        cand_track["seen_checks"] += 1
+                        if cand_track["is_writing"]:
+                            cand_track["writing_checks"] += 1
+                            cand_track["monitoring_status"] = "WRITING"
+                        else:
+                            cand_track["monitoring_status"] = "PRESENT"
                 else:
-                    cand_track["monitoring_status"] = "PRESENT"
+                    # Normal continuous detection while already present at desk
+                    cand_track["has_been_seen_at_desk"] = True
+                    cand_track["last_seen_dt"] = now
+                    cand_track["last_seen_iso"] = now_iso
+                    cand_track["last_seen_time"] = now_time
+                    cand_track["posture"] = face_info.get("posture", "ATTENTIVE")
+                    cand_track["posture_label"] = face_info.get("posture_label", "Attentive")
+                    cand_track["is_writing"] = face_info.get("is_writing", False)
+                    cand_track["pitch_score"] = face_info.get("pitch_score", 0.0)
+                    cand_track["seen_checks"] += 1
+                    if cand_track["is_writing"]:
+                        cand_track["writing_checks"] += 1
+                        cand_track["monitoring_status"] = "WRITING"
+                    else:
+                        cand_track["monitoring_status"] = "PRESENT"
 
-                cand_track["missing_alert_sent"] = False
-                cand_track["missing_duration_sec"] = 0
+                    cand_track["missing_alert_sent"] = False
+                    cand_track["missing_duration_sec"] = 0
             else:
-                # Not detected in this frame
+                # Not detected in this frame:
+                # If they were attempting to verify return (< 5s), cancel and continue absence
+                if cand_track.get("return_start_dt") is not None:
+                    cand_track["return_start_dt"] = None
+                    cand_track["return_start_iso"] = None
+                    cand_track["return_start_time"] = None
+                    cand_track["is_verifying_return"] = False
+                    cand_track["stable_seen_sec"] = 0
+
                 last_seen_dt = cand_track.get("last_seen_dt", now)
                 elapsed_sec = max(0.0, (now - last_seen_dt).total_seconds())
                 cand_track["missing_duration_sec"] = round(elapsed_sec, 1)
@@ -1974,6 +2132,8 @@ class FaceDatabase:
                 "posture": cand_track["posture"],
                 "posture_label": cand_track["posture_label"],
                 "is_writing": cand_track["is_writing"],
+                "is_verifying_return": cand_track.get("is_verifying_return", False),
+                "stable_seen_sec": cand_track.get("stable_seen_sec", 0),
                 "last_seen_time": cand_track["last_seen_time"],
                 "last_seen_seconds_ago": int(cand_track.get("missing_duration_sec", 0)),
                 "presence_percent": presence_pct,
@@ -1984,7 +2144,7 @@ class FaceDatabase:
                 "is_currently_away": cand_track.get("current_open_absence") is not None
             })
 
-        status_priority = {"MISSING": 0, "GRACE_PERIOD": 1, "WRITING": 2, "PRESENT": 3, "WASHROOM": 4, "EXITED": 5}
+        status_priority = {"MISSING": 0, "RETURNING": 0.5, "GRACE_PERIOD": 1, "WRITING": 2, "PRESENT": 3, "WASHROOM": 4, "EXITED": 5}
         roster.sort(key=lambda x: status_priority.get(x["monitoring_status"], 9))
 
         return {
