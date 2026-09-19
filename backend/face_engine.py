@@ -18,7 +18,7 @@ class FaceEngine:
         self.model_manager = FaceModelManager()
         self.db = FaceDatabase()
         self.posture_engine = PostureEngine()
-        self.similarity_threshold = 0.363  # SFace default cosine distance threshold
+        self.similarity_threshold = 0.45  # Stricter SFace cosine distance threshold (80%+ confidence match)
         self.reload_cache()
 
     def reload_cache(self):
@@ -86,11 +86,12 @@ class FaceEngine:
         self,
         image: np.ndarray,
         threshold: Optional[float] = None,
-        score_threshold: float = 0.45
+        score_threshold: float = 0.60
     ) -> List[Dict[str, Any]]:
         """
         Detects, recognizes, and classifies postures for all faces in the provided frame.
         Includes head-down writing detection for exam hall monitoring.
+        Requires >= 80% confidence match to recognize student.
         """
         if threshold is None:
             threshold = self.similarity_threshold
@@ -125,18 +126,27 @@ class FaceEngine:
                         best_score = score
                         best_match_user = user
 
-            # Cosine similarity matching:
-            # If head is down writing, slight angle variance is allowed (effective threshold = threshold - 0.03)
-            effective_threshold = threshold - 0.03 if posture_info.get("is_writing") else threshold
-            is_recognized = (best_match_user is not None) and (best_score >= effective_threshold)
+            # Minimum score threshold must be at least 0.45 (for 80%+ match)
+            base_thresh = max(0.45, threshold)
+            effective_threshold = (base_thresh - 0.03) if posture_info.get("is_writing") else base_thresh
 
             # Map raw score to human-readable confidence percentage
             if best_score <= 0.1:
                 display_conf = max(5.0, round(best_score * 100, 1))
-            elif best_score < threshold:
-                display_conf = round(40.0 + ((best_score - 0.1) / (threshold - 0.1)) * 34.0, 1)
+            elif best_score < base_thresh:
+                # Below threshold: scaled strictly below 80% (30.0% - 78.0%)
+                display_conf = round(30.0 + ((best_score - 0.1) / max(0.01, (base_thresh - 0.1))) * 48.0, 1)
+                display_conf = min(78.5, display_conf)
             else:
-                display_conf = round(75.0 + min(24.9, ((best_score - threshold) / (1.0 - threshold)) * 25.0), 1)
+                # Above threshold: strictly 80.0% to 99.9%
+                display_conf = round(80.0 + min(19.9, ((best_score - base_thresh) / max(0.01, (1.0 - base_thresh))) * 20.0), 1)
+
+            # Strictly require score >= effective_threshold AND display_conf >= 80.0%
+            is_recognized = (
+                best_match_user is not None
+                and best_score >= effective_threshold
+                and display_conf >= 80.0
+            )
 
             results.append({
                 "bbox": [x, y, w, h],
@@ -166,11 +176,12 @@ class FaceEngine:
     ) -> Optional[Dict[str, Any]]:
         """
         Checks if a given face embedding matches any user already registered in the system.
-        Returns the matched user details if similarity >= threshold, else None.
+        Returns the matched user details if similarity >= threshold and confidence >= 80%, else None.
         """
         if threshold is None:
             threshold = self.similarity_threshold
 
+        base_thresh = max(0.45, threshold)
         best_match_user = None
         best_score = -1.0
 
@@ -181,14 +192,15 @@ class FaceEngine:
                     best_score = score
                     best_match_user = user
 
-        if best_match_user is not None and best_score >= threshold:
-            display_conf = round(75.0 + min(24.9, ((best_score - threshold) / (1.0 - threshold)) * 25.0), 1)
-            return {
-                "user_id": best_match_user["user_id"],
-                "name": best_match_user["name"],
-                "roll_id": best_match_user.get("roll_id", ""),
-                "department": best_match_user.get("department", ""),
-                "similarity_score": round(float(best_score), 4),
-                "confidence_percent": display_conf
-            }
+        if best_match_user is not None and best_score >= base_thresh:
+            display_conf = round(80.0 + min(19.9, ((best_score - base_thresh) / max(0.01, (1.0 - base_thresh))) * 20.0), 1)
+            if display_conf >= 80.0:
+                return {
+                    "user_id": best_match_user["user_id"],
+                    "name": best_match_user["name"],
+                    "roll_id": best_match_user.get("roll_id", ""),
+                    "department": best_match_user.get("department", ""),
+                    "similarity_score": round(float(best_score), 4),
+                    "confidence_percent": display_conf
+                }
         return None

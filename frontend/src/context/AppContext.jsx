@@ -13,7 +13,7 @@ export function AppProvider({ children }) {
   // System Settings (Default sound and voice announcements turned OFF)
   const [voiceAnnounce, setVoiceAnnounce] = useState(false);
   const [audioBeep, setAudioBeep] = useState(false);
-  const [threshold, setThreshold] = useState(0.363);
+  const [threshold, setThreshold] = useState(0.45);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [isMirrored, setIsMirrored] = useState(true);
   const [autoPunch, setAutoPunch] = useState(false);

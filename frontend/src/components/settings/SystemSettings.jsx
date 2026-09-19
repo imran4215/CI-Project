@@ -72,9 +72,9 @@ export function SystemSettings() {
               className="w-full accent-cyan-500"
             />
             <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-              <span>0.20 (Strict)</span>
-              <span>0.363 (Recommended)</span>
-              <span>0.60 (Lenient)</span>
+              <span>0.30 (Strict)</span>
+              <span>0.45 (Recommended ≥80%)</span>
+              <span>0.65 (Lenient)</span>
             </div>
           </div>
         </div>

@@ -28,14 +28,14 @@ import {
 } from "lucide-react";
 
 export const STANDARD_TIME_SLOTS = [
-  { id: "slot-1", label: "09:00 - 09:50", displayLabel: "09:00 AM - 09:50 AM", start: "09:00", end: "09:50", period: "Period 1 (Morning)" },
-  { id: "slot-2", label: "10:00 - 10:50", displayLabel: "10:00 AM - 10:50 AM", start: "10:00", end: "10:50", period: "Period 2 (Morning)" },
-  { id: "slot-3", label: "11:00 - 11:50", displayLabel: "11:00 AM - 11:50 AM", start: "11:00", end: "11:50", period: "Period 3 (Morning)" },
-  { id: "slot-4", label: "12:00 - 12:50", displayLabel: "12:00 PM - 12:50 PM", start: "12:00", end: "12:50", period: "Period 4 (Noon)" },
-  { id: "slot-5", label: "01:00 - 01:50", displayLabel: "01:00 PM - 01:50 PM", start: "13:00", end: "13:50", period: "Period 5 (Lunch / Prayer)" },
-  { id: "slot-6", label: "02:00 - 02:50", displayLabel: "02:00 PM - 02:50 PM", start: "14:00", end: "14:50", period: "Period 6 (Afternoon)" },
-  { id: "slot-7", label: "03:00 - 03:50", displayLabel: "03:00 PM - 03:50 PM", start: "15:00", end: "15:50", period: "Period 7 (Afternoon)" },
-  { id: "slot-8", label: "04:00 - 04:50", displayLabel: "04:00 PM - 04:50 PM", start: "16:00", end: "16:50", period: "Period 8 (Late Afternoon)" },
+  { id: "slot-1", label: "09:00 AM - 09:50 AM", displayLabel: "09:00 AM - 09:50 AM", start: "09:00", end: "09:50" },
+  { id: "slot-2", label: "10:00 AM - 10:50 AM", displayLabel: "10:00 AM - 10:50 AM", start: "10:00", end: "10:50" },
+  { id: "slot-3", label: "11:00 AM - 11:50 AM", displayLabel: "11:00 AM - 11:50 AM", start: "11:00", end: "11:50" },
+  { id: "slot-4", label: "12:00 PM - 12:50 PM", displayLabel: "12:00 PM - 12:50 PM", start: "12:00", end: "12:50" },
+  { id: "slot-5", label: "01:00 PM - 01:50 PM", displayLabel: "01:00 PM - 01:50 PM", start: "13:00", end: "13:50" },
+  { id: "slot-6", label: "02:00 PM - 02:50 PM", displayLabel: "02:00 PM - 02:50 PM", start: "14:00", end: "14:50" },
+  { id: "slot-7", label: "03:00 PM - 03:50 PM", displayLabel: "03:00 PM - 03:50 PM", start: "15:00", end: "15:50" },
+  { id: "slot-8", label: "04:00 PM - 04:50 PM", displayLabel: "04:00 PM - 04:50 PM", start: "16:00", end: "16:50" },
 ];
 
 export const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -49,9 +49,84 @@ export function ClassRoutineManager() {
   const [selectedDayTab, setSelectedDayTab] = useState("ALL"); // "ALL" or specific day
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Dynamic Time Slots State (initialized with standard 50-min slots)
+  const [timeSlots, setTimeSlots] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("digihall_routine_time_slots");
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return STANDARD_TIME_SLOTS;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("digihall_routine_time_slots", JSON.stringify(timeSlots));
+      } catch (e) {}
+    }
+  }, [timeSlots]);
+
   // Modal / Drawer Form State for Creating or Editing a Slot
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlotId, setEditingSlotId] = useState(null);
+
+  // Add New Time Slot Column Modal State (Standardized Picker)
+  const [isAddTimeModalOpen, setIsAddTimeModalOpen] = useState(false);
+  const [startHour, setStartHour] = useState("03");
+  const [startMinute, setStartMinute] = useState("00");
+  const [startAmPm, setStartAmPm] = useState("PM");
+  const [endHour, setEndHour] = useState("03");
+  const [endMinute, setEndMinute] = useState("50");
+  const [endAmPm, setEndAmPm] = useState("PM");
+
+  // Convert 12h time strings to standard 24h format (e.g. "03", "50", "PM" => "15:50")
+  const to24Hour = (hStr, mStr, ampm) => {
+    let h = parseInt(hStr, 10) || 0;
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${String(mStr).padStart(2, "0")}`;
+  };
+
+  // Convert 24h total minutes to 12h components
+  const from24HourMinutes = (totalMinutes) => {
+    const norm = ((totalMinutes % 1440) + 1440) % 1440;
+    const h24 = Math.floor(norm / 60);
+    const m = norm % 60;
+    const ampm = h24 >= 12 ? "PM" : "AM";
+    let h12 = h24 % 12;
+    if (h12 === 0) h12 = 12;
+    return {
+      hour: String(h12).padStart(2, "0"),
+      minute: String(m).padStart(2, "0"),
+      ampm,
+    };
+  };
+
+  // Quick apply duration (+50m, +60m, +90m, +120m) from Start Time
+  const applyDuration = (mins) => {
+    let h = parseInt(startHour, 10) || 0;
+    if (startAmPm === "PM" && h !== 12) h += 12;
+    if (startAmPm === "AM" && h === 12) h = 0;
+    const m = parseInt(startMinute, 10) || 0;
+    const startTotal = h * 60 + m;
+    const endTotal = startTotal + mins;
+    const res = from24HourMinutes(endTotal);
+    setEndHour(res.hour);
+    setEndMinute(res.minute);
+    setEndAmPm(res.ampm);
+  };
+
+  // Quick apply preset start & end time
+  const applyPresetTime = (sH, sM, sAP, eH, eM, eAP) => {
+    setStartHour(sH);
+    setStartMinute(sM);
+    setStartAmPm(sAP);
+    setEndHour(eH);
+    setEndMinute(eM);
+    setEndAmPm(eAP);
+  };
 
   // Form Fields
   const [formRoomId, setFormRoomId] = useState("");
@@ -110,6 +185,53 @@ export function ClassRoutineManager() {
     });
   }, [routines, selectedRoomId, selectedDayTab, searchQuery]);
 
+  // Handler for adding a new time slot column
+  const handleAddNewTimeSlot = (e) => {
+    e?.preventDefault();
+    const formattedSlot = `${startHour}:${startMinute} ${startAmPm} - ${endHour}:${endMinute} ${endAmPm}`;
+    const start24 = to24Hour(startHour, startMinute, startAmPm);
+    const end24 = to24Hour(endHour, endMinute, endAmPm);
+
+    if (start24 === end24) {
+      addToast("Start time and End time cannot be identical.", "error");
+      return;
+    }
+
+    if (timeSlots.some((s) => s.label === formattedSlot)) {
+      addToast(`Time slot "${formattedSlot}" already exists in the routine!`, "error");
+      return;
+    }
+
+    const newSlot = {
+      id: `slot-${Date.now()}`,
+      label: formattedSlot,
+      displayLabel: formattedSlot,
+      start: start24,
+      end: end24,
+    };
+
+    setTimeSlots((prev) => {
+      const updated = [...prev, newSlot];
+      return updated.sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+    });
+
+    addToast(`✅ Added ${formattedSlot} to weekly timetable!`, "success");
+    setIsAddTimeModalOpen(false);
+  };
+
+  // Handler for deleting a time slot column
+  const handleDeleteTimeSlot = (slotId, slotLabel) => {
+    if (timeSlots.length <= 1) {
+      addToast("You must keep at least one time slot column.", "error");
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete time slot column "${slotLabel}" from the timetable?`)) {
+      return;
+    }
+    setTimeSlots((prev) => prev.filter((s) => s.id !== slotId));
+    addToast(`🗑️ Deleted time slot column "${slotLabel}"`, "info");
+  };
+
   // Open modal for new slot
   const openNewSlotModal = (presetDay = "Sunday", presetSlot = "09:00 - 09:50") => {
     setEditingSlotId(null);
@@ -118,15 +240,15 @@ export function ClassRoutineManager() {
     setFormDay(presetDay);
     setFormSlotPreset(presetSlot);
 
-    const slotObj = STANDARD_TIME_SLOTS.find((s) => s.label === presetSlot);
+    const slotObj = timeSlots.find((s) => s.label === presetSlot);
     if (slotObj) {
       setIsCustomTime(false);
       setFormStartTime(slotObj.start);
       setFormEndTime(slotObj.end);
     } else {
       setIsCustomTime(true);
-      setFormStartTime("09:00");
-      setFormEndTime("09:50");
+      setFormStartTime(presetSlot.split("-")[0]?.trim() || "09:00");
+      setFormEndTime(presetSlot.split("-")[1]?.trim() || "09:50");
     }
 
     setIsGap(false);
@@ -154,15 +276,15 @@ export function ClassRoutineManager() {
     setFormDeptName(slot.department || selectedDeptName);
     setFormDay(slot.day || "Sunday");
 
-    const matchedPreset = STANDARD_TIME_SLOTS.find((s) => s.label === slot.time_slot);
+    const matchedPreset = timeSlots.find((s) => s.label === slot.time_slot);
     if (matchedPreset) {
       setFormSlotPreset(slot.time_slot);
       setIsCustomTime(false);
       setFormStartTime(matchedPreset.start);
       setFormEndTime(matchedPreset.end);
     } else {
-      setFormSlotPreset("CUSTOM");
-      setIsCustomTime(true);
+      setFormSlotPreset(slot.time_slot || "09:00 - 09:50");
+      setIsCustomTime(false);
       setFormStartTime(slot.start_time || "09:00");
       setFormEndTime(slot.end_time || "09:50");
     }
@@ -330,11 +452,13 @@ export function ClassRoutineManager() {
 
   // Find slot for matrix cell
   const getSlotForCell = (day, timeSlotLabel) => {
+    if (!routines || !selectedRoomId) return null;
+    const norm = (s) => (s || "").replace(/\s*(AM|PM)\s*/gi, "").trim();
     return routines.find(
       (r) =>
         r.room_id === selectedRoomId &&
         r.day?.toLowerCase() === day.toLowerCase() &&
-        r.time_slot === timeSlotLabel
+        (r.time_slot === timeSlotLabel || norm(r.time_slot) === norm(timeSlotLabel))
     );
   };
 
@@ -506,18 +630,47 @@ export function ClassRoutineManager() {
           </div>
         </div>
 
-        {/* Matrix Table */}
-        <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/70 shadow-inner">
-          <table className="w-full text-left border-collapse min-w-[900px]">
+        {/* Matrix Table with Smooth Horizontal Scroll */}
+        <div className="border border-slate-800 rounded-xl overflow-x-auto bg-slate-950/70 shadow-inner max-w-full custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-max">
             <thead>
               <tr className="bg-slate-900 border-b border-slate-800 text-xs font-mono text-slate-300">
-                <th className="p-3.5 font-bold uppercase tracking-wider border-r border-slate-800 w-28 bg-slate-900/90 sticky left-0 z-10">
-                  Day / Time
+                <th className="p-2.5 font-bold uppercase tracking-wider border-r border-slate-800 w-28 min-w-[110px] max-w-[120px] bg-slate-900 sticky left-0 z-20 shadow-md">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white text-[11px] font-black">Day / Time</span>
+                      <span className="text-[9px] text-cyan-400 font-mono">({timeSlots.length})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddTimeModalOpen(true);
+                      }}
+                      className="px-1.5 py-1 rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-[10px] font-mono tracking-wide flex items-center justify-center gap-1 shadow-neon-cyan transition hover:scale-[1.02]"
+                      title="Add new time slot column"
+                    >
+                      <Plus className="w-3 h-3 stroke-[3]" /> Add Time
+                    </button>
+                  </div>
                 </th>
-                {STANDARD_TIME_SLOTS.map((slot) => (
-                  <th key={slot.id} className="p-3 text-center border-r border-slate-800 font-bold">
-                    <div className="text-cyan-300 font-extrabold text-[12px]">{slot.displayLabel || slot.label}</div>
-                    <div className="text-[10px] text-slate-400 font-normal">{slot.period}</div>
+                {timeSlots.map((slot) => (
+                  <th key={slot.id} className="py-2.5 px-1.5 text-center border-r border-slate-800 font-bold relative group w-28 min-w-[108px] max-w-[120px] whitespace-nowrap bg-slate-900/60">
+                    <div className="text-cyan-300 font-bold text-[10px] font-mono tracking-tighter whitespace-nowrap">
+                      {slot.displayLabel || slot.label}
+                    </div>
+
+                    {/* Delete time slot column button on hover */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteTimeSlot(slot.id, slot.displayLabel || slot.label);
+                      }}
+                      title={`Delete time slot "${slot.displayLabel || slot.label}"`}
+                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-0.5 rounded bg-slate-800/90 hover:bg-rose-600 text-slate-400 hover:text-white transition shadow"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
                   </th>
                 ))}
               </tr>
@@ -525,27 +678,27 @@ export function ClassRoutineManager() {
             <tbody className="divide-y divide-slate-800/70 text-xs font-mono">
               {(selectedDayTab === "ALL" ? DAYS_OF_WEEK : [selectedDayTab]).map((day) => (
                 <tr key={day} className="hover:bg-slate-900/40 transition">
-                  {/* Day Header Row */}
-                  <td className="p-3.5 font-bold text-white uppercase tracking-wider bg-slate-900/80 border-r border-slate-800 sticky left-0 z-10 flex flex-col justify-center">
-                    <div className="flex items-center gap-1.5 text-sky-400">
+                  {/* Day Header Row (Sticky on Left) */}
+                  <td className="p-2.5 font-bold text-white uppercase tracking-wider bg-slate-900/90 border-r border-slate-800 sticky left-0 z-10 flex flex-col justify-center w-28 min-w-[110px] max-w-[120px] shadow-md">
+                    <div className="flex items-center gap-1 text-sky-400 text-xs">
                       <CalendarDays className="w-3.5 h-3.5" /> {day}
                     </div>
                   </td>
 
-                  {/* 8 Period Columns */}
-                  {STANDARD_TIME_SLOTS.map((slot) => {
+                  {/* Dynamic Time Slot Columns */}
+                  {timeSlots.map((slot) => {
                     const slotData = getSlotForCell(day, slot.label);
 
                     if (!slotData) {
                       return (
-                        <td key={slot.id} className="p-2 border-r border-slate-800 text-center align-top h-24">
+                        <td key={slot.id} className="p-1 border-r border-slate-800 text-center align-top h-20 w-28 min-w-[108px] max-w-[120px]">
                           <button
                             onClick={() => openNewSlotModal(day, slot.label)}
-                            className="w-full h-full min-h-[76px] rounded-lg border border-dashed border-slate-800/80 hover:border-cyan-500/60 hover:bg-cyan-500/5 transition flex flex-col items-center justify-center gap-1 text-slate-600 hover:text-cyan-400 group p-1"
+                            className="w-full h-full min-h-[58px] rounded-lg border border-dashed border-slate-800/80 hover:border-cyan-500/60 hover:bg-cyan-500/5 transition flex flex-col items-center justify-center gap-0.5 text-slate-600 hover:text-cyan-400 group p-1"
                             title={`Add class for ${day} at ${slot.label}`}
                           >
-                            <Plus className="w-4 h-4 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition" />
-                            <span className="text-[10px] font-mono opacity-60 group-hover:opacity-100">Assign</span>
+                            <Plus className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition" />
+                            <span className="text-[9px] font-mono opacity-60 group-hover:opacity-100">Assign</span>
                           </button>
                         </td>
                       );
@@ -553,65 +706,65 @@ export function ClassRoutineManager() {
 
                     if (slotData.is_gap) {
                       return (
-                        <td key={slot.id} className="p-2 border-r border-slate-800 align-top h-24">
-                          <div className="relative group w-full h-full min-h-[76px] rounded-lg bg-amber-500/10 border border-amber-500/30 p-2 flex flex-col justify-between overflow-hidden shadow-[inset_0_0_12px_rgba(245,158,11,0.05)]">
+                        <td key={slot.id} className="p-1 border-r border-slate-800 align-top h-20 w-28 min-w-[108px] max-w-[120px]">
+                          <div className="relative group w-full h-full min-h-[58px] rounded-lg bg-amber-500/10 border border-amber-500/30 p-1.5 flex flex-col justify-between overflow-hidden shadow-[inset_0_0_10px_rgba(245,158,11,0.05)]">
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold text-amber-400 flex items-center gap-1">
-                                <Coffee className="w-3 h-3" /> BREAK
+                              <span className="text-[9px] font-bold text-amber-400 flex items-center gap-0.5">
+                                <Coffee className="w-2.5 h-2.5" /> BREAK
                               </span>
-                              <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                              <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-0.5">
                                 <button
                                   onClick={() => openEditSlotModal(slotData)}
-                                  className="p-1 rounded bg-slate-900/90 hover:bg-cyan-500 text-slate-400 hover:text-slate-950 transition"
+                                  className="p-0.5 rounded bg-slate-900/90 hover:bg-cyan-500 text-slate-400 hover:text-slate-950 transition"
                                 >
                                   <Edit2 className="w-2.5 h-2.5" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteSlot(slotData.id, slotData.day, slotData.time_slot)}
-                                  className="p-1 rounded bg-slate-900/90 hover:bg-rose-500 text-slate-400 hover:text-white transition"
+                                  className="p-0.5 rounded bg-slate-900/90 hover:bg-rose-500 text-slate-400 hover:text-white transition"
                                 >
                                   <Trash2 className="w-2.5 h-2.5" />
                                 </button>
                               </div>
                             </div>
-                            <div className="text-[11px] font-bold text-slate-200 line-clamp-1">
-                              {slotData.course_name || "No Class / Recess"}
+                            <div className="text-[9.5px] font-bold text-slate-200 line-clamp-1 leading-tight">
+                              {slotData.course_name || "No Class"}
                             </div>
-                            <div className="text-[9px] text-amber-300/80 font-mono">10-min interval included</div>
+                            <div className="text-[8px] text-amber-300/70 font-mono">Recess</div>
                           </div>
                         </td>
                       );
                     }
 
                     return (
-                      <td key={slot.id} className="p-2 border-r border-slate-800 align-top h-24">
-                        <div className="relative group w-full h-full min-h-[76px] rounded-lg bg-slate-900/90 border border-cyan-500/40 hover:border-cyan-400 p-2 flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-neon-cyan transition">
+                      <td key={slot.id} className="p-1 border-r border-slate-800 align-top h-20 w-28 min-w-[108px] max-w-[120px]">
+                        <div className="relative group w-full h-full min-h-[58px] rounded-lg bg-slate-900/90 border border-cyan-500/40 hover:border-cyan-400 p-1.5 flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-neon-cyan transition">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-extrabold text-cyan-300 font-mono">
+                            <span className="text-[10px] font-extrabold text-cyan-300 font-mono truncate max-w-[70px]">
                               {slotData.course_code}
                             </span>
-                            <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                            <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-0.5">
                               <button
                                 onClick={() => openEditSlotModal(slotData)}
-                                className="p-1 rounded bg-slate-800 hover:bg-cyan-500 text-slate-300 hover:text-slate-950 transition"
+                                className="p-0.5 rounded bg-slate-800 hover:bg-cyan-500 text-slate-300 hover:text-slate-950 transition"
                               >
                                 <Edit2 className="w-2.5 h-2.5" />
                               </button>
                               <button
                                 onClick={() => handleDeleteSlot(slotData.id, slotData.day, slotData.time_slot)}
-                                className="p-1 rounded bg-slate-800 hover:bg-rose-500 text-slate-300 hover:text-white transition"
+                                className="p-0.5 rounded bg-slate-800 hover:bg-rose-500 text-slate-300 hover:text-white transition"
                               >
                                 <Trash2 className="w-2.5 h-2.5" />
                               </button>
                             </div>
                           </div>
 
-                          <div className="text-[11px] font-bold text-white line-clamp-1" title={slotData.course_name}>
+                          <div className="text-[9.5px] font-bold text-white line-clamp-1 leading-tight" title={slotData.course_name}>
                             {slotData.course_name}
                           </div>
 
-                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                            <span className="truncate max-w-[80px]" title={slotData.instructor || "Faculty"}>
+                          <div className="flex items-center justify-between text-[8.5px] text-slate-400 font-mono leading-none">
+                            <span className="truncate max-w-[55px]" title={slotData.instructor || "Faculty"}>
                               {slotData.instructor || "Faculty"}
                             </span>
                             <span className="text-slate-500">{slotData.section || "Sec A"}</span>
@@ -696,62 +849,16 @@ export function ClassRoutineManager() {
                   <span className="text-[10px] text-emerald-400/80 font-mono">Weekly Slot • Fixed</span>
                 </div>
 
-                {/* 4. 50-Min Standard Time Slot (Editable with AM/PM) */}
-                <div className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-slate-950/80 border border-amber-500/40 hover:border-amber-400 transition">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-400" /> 50-Min Standard Time Slot:
-                    </span>
-                    <span className="text-[9px] font-mono text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
-                      Editable (AM/PM)
-                    </span>
+                {/* 4. Time Slot (Fixed) */}
+                <div className="flex flex-col gap-1 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" /> Time Slot:
+                  </span>
+                  <div className="text-xs font-black text-amber-300 font-mono truncate">
+                    {timeSlots.find((s) => s.label === formSlotPreset)?.displayLabel || formSlotPreset}
                   </div>
-
-                  <select
-                    value={isCustomTime ? "CUSTOM" : formSlotPreset}
-                    onChange={(e) => handlePresetChange(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 hover:border-amber-400 focus:border-amber-400 text-xs font-black text-amber-300 font-mono rounded-lg px-2.5 py-1.5 outline-none cursor-pointer w-full transition"
-                  >
-                    {STANDARD_TIME_SLOTS.map((s) => (
-                      <option key={s.id} value={s.label} className="bg-slate-900 text-white font-mono">
-                        {s.displayLabel || s.label} — {s.period}
-                      </option>
-                    ))}
-                    <option value="CUSTOM" className="bg-slate-900 text-cyan-300 font-mono">
-                      ⚙️ Custom Time Slot (Manual AM / PM)
-                    </option>
-                  </select>
-
-                  {/* Custom Start & End Time Inputs if CUSTOM is chosen */}
-                  {isCustomTime && (
-                    <div className="grid grid-cols-2 gap-2 mt-1 pt-1.5 border-t border-slate-800 animate-fadeIn">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-slate-400 font-mono">Start Time (e.g. 04:00 PM):</span>
-                        <input
-                          type="text"
-                          value={formStartTime}
-                          onChange={(e) => setFormStartTime(e.target.value)}
-                          placeholder="04:00 PM"
-                          className="bg-slate-900 border border-slate-700 text-white text-xs font-mono rounded px-2 py-1 outline-none focus:border-cyan-400"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-slate-400 font-mono">End Time (e.g. 04:50 PM):</span>
-                        <input
-                          type="text"
-                          value={formEndTime}
-                          onChange={(e) => setFormEndTime(e.target.value)}
-                          placeholder="04:50 PM"
-                          className="bg-slate-900 border border-slate-700 text-white text-xs font-mono rounded px-2 py-1 outline-none focus:border-cyan-400"
-                        />
-                      </div>
-                    </div>
-                  )}
-
                   <span className="text-[10px] text-amber-400/80 font-mono">
-                    {isCustomTime
-                      ? `Custom Time: ${formStartTime} - ${formEndTime}`
-                      : `Selected Period: ${STANDARD_TIME_SLOTS.find((s) => s.label === formSlotPreset)?.displayLabel || formSlotPreset}`}
+                    Time Slot • Fixed
                   </span>
                 </div>
               </div>
@@ -875,6 +982,292 @@ export function ClassRoutineManager() {
                   className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs font-mono transition shadow-neon-cyan flex items-center gap-1.5"
                 >
                   <Save className="w-4 h-4" /> {editingSlotId ? "Update Routine Slot" : "Save Routine Slot"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Add New Time Slot Column Modal (Standardized Time Selector) */}
+      {isAddTimeModalOpen && (
+        <div className="fixed inset-0 z-[99999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="glass-panel w-full max-w-lg p-6 flex flex-col gap-4 border-2 border-cyan-500/50 bg-slate-950/95 shadow-2xl rounded-2xl relative my-auto max-h-[92vh] overflow-y-auto custom-scrollbar">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyber-cyan shadow-neon-cyan">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-white">Add Standard Time Slot</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">Structured period selector for timetable & AI surveillance clock matching</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddTimeModalOpen(false)}
+                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddNewTimeSlot} className="flex flex-col gap-4">
+              {/* Start Time Picker */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-cyan-300 font-mono flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" /> Start Time (12-Hour):
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Hour */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-slate-400 font-mono">Hour</span>
+                    <select
+                      value={startHour}
+                      onChange={(e) => setStartHour(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono font-bold outline-none focus:border-cyan-400 transition"
+                    >
+                      {["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"].map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Minute */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-slate-400 font-mono">Minute</span>
+                    <select
+                      value={startMinute}
+                      onChange={(e) => setStartMinute(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono font-bold outline-none focus:border-cyan-400 transition"
+                    >
+                      {["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"].map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* AM / PM Toggle */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-slate-400 font-mono">AM / PM</span>
+                    <div className="grid grid-cols-2 gap-1 h-full">
+                      <button
+                        type="button"
+                        onClick={() => setStartAmPm("AM")}
+                        className={`rounded-xl text-xs font-black font-mono transition py-2 ${
+                          startAmPm === "AM"
+                            ? "bg-cyan-500 text-slate-950 shadow-neon-cyan"
+                            : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                        }`}
+                      >
+                        AM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStartAmPm("PM")}
+                        className={`rounded-xl text-xs font-black font-mono transition py-2 ${
+                          startAmPm === "PM"
+                            ? "bg-cyan-500 text-slate-950 shadow-neon-cyan"
+                            : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                        }`}
+                      >
+                        PM
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Duration Calculator (Auto sets End Time) */}
+              <div className="flex flex-col gap-1.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800">
+                <span className="text-[10px] text-amber-300 font-mono font-bold flex items-center gap-1 uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5" /> Quick Duration Calc (Auto-sets End Time):
+                </span>
+                <div className="grid grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => applyDuration(50)}
+                    className="px-2 py-1.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-black transition hover:scale-[1.02] text-center"
+                  >
+                    ⚡ +50 Min (Standard)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyDuration(60)}
+                    className="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono font-bold transition hover:scale-[1.02] text-center"
+                  >
+                    +60 Min (1 Hr)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyDuration(90)}
+                    className="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono font-bold transition hover:scale-[1.02] text-center"
+                  >
+                    +90 Min (1.5 Hr Lab)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyDuration(120)}
+                    className="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono font-bold transition hover:scale-[1.02] text-center"
+                  >
+                    +120 Min (2 Hr Lab)
+                  </button>
+                </div>
+              </div>
+
+              {/* End Time Picker */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-sky-300 font-mono flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" /> End Time (12-Hour):
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Hour */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-slate-400 font-mono">Hour</span>
+                    <select
+                      value={endHour}
+                      onChange={(e) => setEndHour(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono font-bold outline-none focus:border-cyan-400 transition"
+                    >
+                      {["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"].map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Minute */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-slate-400 font-mono">Minute</span>
+                    <select
+                      value={endMinute}
+                      onChange={(e) => setEndMinute(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono font-bold outline-none focus:border-cyan-400 transition"
+                    >
+                      {["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"].map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* AM / PM Toggle */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-slate-400 font-mono">AM / PM</span>
+                    <div className="grid grid-cols-2 gap-1 h-full">
+                      <button
+                        type="button"
+                        onClick={() => setEndAmPm("AM")}
+                        className={`rounded-xl text-xs font-black font-mono transition py-2 ${
+                          endAmPm === "AM"
+                            ? "bg-cyan-500 text-slate-950 shadow-neon-cyan"
+                            : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                        }`}
+                      >
+                        AM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEndAmPm("PM")}
+                        className={`rounded-xl text-xs font-black font-mono transition py-2 ${
+                          endAmPm === "PM"
+                            ? "bg-cyan-500 text-slate-950 shadow-neon-cyan"
+                            : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                        }`}
+                      >
+                        PM
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview Card & Real-Time Sync Tag */}
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/40 border border-cyan-500/30 flex flex-col gap-2 shadow-inner">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <Info className="w-3.5 h-3.5 text-cyan-400" /> Formatted Slot Output
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Surveillance Sync Ready
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-black text-cyan-300 font-mono tracking-tight">
+                      {startHour}:{startMinute} {startAmPm} - {endHour}:{endMinute} {endAmPm}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      24h Clock: {to24Hour(startHour, startMinute, startAmPm)} - {to24Hour(endHour, endMinute, endAmPm)}
+                    </span>
+                  </div>
+
+                  <div className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-300 font-bold">
+                    {(() => {
+                      const s24 = to24Hour(startHour, startMinute, startAmPm);
+                      const e24 = to24Hour(endHour, endMinute, endAmPm);
+                      const [sh, sm] = s24.split(":").map(Number);
+                      const [eh, em] = e24.split(":").map(Number);
+                      const sTotal = sh * 60 + sm;
+                      const eTotal = eh * 60 + em;
+                      const diff = eTotal >= sTotal ? eTotal - sTotal : 1440 - sTotal + eTotal;
+                      return `${diff} Min Duration`;
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Standard Presets */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">Quick Suggestions:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: "08:00 AM - 08:50 AM", sH: "08", sM: "00", sAP: "AM", eH: "08", eM: "50", eAP: "AM" },
+                    { label: "09:00 AM - 09:50 AM", sH: "09", sM: "00", sAP: "AM", eH: "09", eM: "50", eAP: "AM" },
+                    { label: "10:00 AM - 10:50 AM", sH: "10", sM: "00", sAP: "AM", eH: "10", eM: "50", eAP: "AM" },
+                    { label: "11:00 AM - 11:50 AM", sH: "11", sM: "00", sAP: "AM", eH: "11", eM: "50", eAP: "AM" },
+                    { label: "12:00 PM - 12:50 PM", sH: "12", sM: "00", sAP: "PM", eH: "12", eM: "50", eAP: "PM" },
+                    { label: "01:00 PM - 01:50 PM", sH: "01", sM: "00", sAP: "PM", eH: "01", eM: "50", eAP: "PM" },
+                    { label: "02:00 PM - 02:50 PM", sH: "02", sM: "00", sAP: "PM", eH: "02", eM: "50", eAP: "PM" },
+                    { label: "03:00 PM - 03:50 PM", sH: "03", sM: "00", sAP: "PM", eH: "03", eM: "50", eAP: "PM" },
+                    { label: "04:00 PM - 04:50 PM", sH: "04", sM: "00", sAP: "PM", eH: "04", eM: "50", eAP: "PM" },
+                    { label: "05:00 PM - 05:50 PM", sH: "05", sM: "00", sAP: "PM", eH: "05", eM: "50", eAP: "PM" },
+                    { label: "06:00 PM - 06:50 PM", sH: "06", sM: "00", sAP: "PM", eH: "06", eM: "50", eAP: "PM" },
+                  ].map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => applyPresetTime(p.sH, p.sM, p.sAP, p.eH, p.eM, p.eAP)}
+                      className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-cyan-300 border border-slate-800 hover:border-cyan-500/50 transition font-bold"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddTimeModalOpen(false)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-neon-cyan"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[3]" /> Add to Routine Table
                 </button>
               </div>
             </form>

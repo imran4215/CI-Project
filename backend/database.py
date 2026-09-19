@@ -2084,13 +2084,13 @@ class FaceDatabase:
         today_att = self.get_today_attendance(room_id=active_room_id, day_key=day_key)
         records_map = {r["candidate_id"]: r for r in today_att.get("records", [])}
 
-        # Build detected recognized users map
+        # Build detected recognized users map (strictly 80%+ confidence)
         detected_user_map = {}
         unrecognized_count = 0
         for f in detected_faces:
-            if f.get("is_recognized") and f.get("user_id"):
+            if f.get("is_recognized") and f.get("user_id") and f.get("confidence_percent", 0) >= 80.0:
                 detected_user_map[f["user_id"]] = f
-            elif not f.get("is_recognized"):
+            else:
                 unrecognized_count += 1
 
         # Track ONLY candidates who are currently INSIDE or in approved WASHROOM break
@@ -2531,7 +2531,7 @@ class FaceDatabase:
         guest_faces = []
 
         for face in detected_faces:
-            if face.get("is_recognized") and face.get("user_id"):
+            if face.get("is_recognized") and face.get("user_id") and face.get("confidence_percent", 0) >= 80.0:
                 u_id = face["user_id"]
                 seen_user_ids.add(u_id)
 

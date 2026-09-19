@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { useApp } from "../../context/AppContext";
 import { api } from "../../services/api";
+import { drawClassroomFaceDetections } from "../../utils/faceDrawing";
 import {
   Camera,
   RefreshCw,
@@ -55,17 +56,27 @@ export function ClassroomMonitor() {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
 
+  // Real-Time System Clock (Ticks every second)
+  const [currentClockTime, setCurrentClockTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentClockTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Today's Day of Week name (e.g. "Sunday", "Monday")
+  const currentDayName = useMemo(() => {
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return dayNames[currentClockTime.getDay()] || "Sunday";
+  }, [currentClockTime]);
+
   // Rooms, Departments, Routines State
   const [rooms, setRooms] = useState([]);
   const [selectedRoomId, setSelectedRoomId] = useState("");
-  const [departments, setDepartments] = useState([]);
-  const [selectedDept, setSelectedDept] = useState("Computer Science & Engineering (CSE)");
-  const [daysOfWeek] = useState(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
-  const [selectedDay, setSelectedDay] = useState("Monday");
   const [routines, setRoutines] = useState([]);
-  const [selectedRoutine, setSelectedRoutine] = useState(null);
-  const [customCourseCode, setCustomCourseCode] = useState("");
-  const [customCourseName, setCustomCourseName] = useState("");
+  const [manualSelectedRoutineId, setManualSelectedRoutineId] = useState(""); // User manual override if chosen
 
   // Classroom Session Data from Backend
   const [classroomData, setClassroomData] = useState({
@@ -83,23 +94,13 @@ export function ClassroomMonitor() {
 
   // Absence Timeout & Sensitivity Settings
   const [absenceThresholdSec, setAbsenceThresholdSec] = useState(45);
-  const [voiceAlertsEnabled, setVoiceAlertsEnabled] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [filterSearch, setFilterSearch] = useState("");
   const [rosterFilter, setRosterFilter] = useState("ALL"); // ALL, PRESENT, STEPPED_OUT, ABSENT
 
   const fpsTracker = useRef({ count: 0, lastTime: performance.now() });
 
-  // Auto-detect current day of week on mount
-  useEffect(() => {
-    const todayIndex = new Date().getDay();
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    if (dayNames[todayIndex]) {
-      setSelectedDay(dayNames[todayIndex]);
-    }
-  }, []);
-
-  // Fetch Rooms & Departments
+  // Fetch Rooms on Mount
   useEffect(() => {
     api.getRooms().then((res) => {
       const rmList = res.rooms || [];
@@ -108,48 +109,129 @@ export function ClassroomMonitor() {
         setSelectedRoomId(rmList[0].id);
       }
     }).catch((e) => console.warn("Error fetching rooms:", e));
-
-    api.getDepartments().then((res) => {
-      const dList = res.departments || [];
-      setDepartments(dList);
-      if (dList.length > 0 && !selectedDept) {
-        setSelectedDept(dList[0].name);
-      }
-    }).catch((e) => console.warn("Error fetching depts:", e));
   }, []);
 
-  // Fetch Routines for Selected Room & Day
-  const loadRoutinesForSlot = useCallback(async () => {
+  // Fetch All Routines for Selected Room
+  const loadRoutinesForRoom = useCallback(async () => {
     if (!selectedRoomId) return;
     try {
-      const res = await api.getRoutines({ roomId: selectedRoomId, department: selectedDept, day: selectedDay });
-      const rts = (res.routines || []).filter((r) => !r.is_gap);
+      const res = await api.getRoutines({ roomId: selectedRoomId });
+      const rts = res.routines || [];
       setRoutines(rts);
-      if (rts.length > 0) {
-        setSelectedRoutine(rts[0]);
-        setCustomCourseCode(rts[0].course_code || "");
-        setCustomCourseName(rts[0].course_name || "");
-      } else {
-        setSelectedRoutine(null);
-        // Fallback default
-        setCustomCourseCode("CSE-311");
-        setCustomCourseName("Artificial Intelligence");
-      }
     } catch (e) {
-      console.warn("Error fetching routines:", e);
+      console.warn("Error fetching routines for room:", e);
     }
-  }, [selectedRoomId, selectedDept, selectedDay]);
+  }, [selectedRoomId]);
 
   useEffect(() => {
-    loadRoutinesForSlot();
-  }, [loadRoutinesForSlot]);
+    loadRoutinesForRoom();
+  }, [loadRoutinesForRoom]);
 
-  // Active active course identifiers
-  const activeCourseCode = selectedRoutine ? selectedRoutine.course_code : (customCourseCode || "CSE-311");
-  const activeCourseName = selectedRoutine ? selectedRoutine.course_name : (customCourseName || "Artificial Intelligence");
-  const activeTimeSlot = selectedRoutine ? selectedRoutine.time_slot : "09:00 - 09:50";
+  // Helper to parse time string (e.g. "09:00", "01:00 PM", "14:30") to total minutes from midnight
+  const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return null;
+    const str = timeStr.trim().toUpperCase();
+    const isPm = str.includes("PM");
+    const isAm = str.includes("AM");
+    const cleanStr = str.replace(/(AM|PM)/g, "").trim();
+    const parts = cleanStr.split(":");
+    if (parts.length < 2) return null;
+    let hours = parseInt(parts[0], 10);
+    const mins = parseInt(parts[1], 10);
+    if (isNaN(hours) || isNaN(mins)) return null;
+    if (isPm && hours < 12) hours += 12;
+    if (isAm && hours === 12) hours = 0;
+    return hours * 60 + mins;
+  };
 
-  // Fetch initial classroom status
+  // Helper to parse routine time range into start and end minutes
+  const parseSlotRange = (slotStr, routineObj) => {
+    if (routineObj?.start_time && routineObj?.end_time) {
+      const s = parseTimeToMinutes(routineObj.start_time);
+      const e = parseTimeToMinutes(routineObj.end_time);
+      if (s !== null && e !== null) return { startMins: s, endMins: e };
+    }
+    if (!slotStr) return null;
+    const parts = slotStr.split("-");
+    if (parts.length !== 2) return null;
+    const s = parseTimeToMinutes(parts[0]);
+    const e = parseTimeToMinutes(parts[1]);
+    if (s === null || e === null) return null;
+    return { startMins: s, endMins: e };
+  };
+
+  // Real-Time Routine Auto-Matcher (Matches today's day & current clock minutes)
+  const matchedRealTimeRoutine = useMemo(() => {
+    if (!routines || routines.length === 0) return null;
+
+    const nowH = currentClockTime.getHours();
+    const nowM = currentClockTime.getMinutes();
+    const nowTotalMins = nowH * 60 + nowM;
+
+    // Filter routines for today's weekday
+    const todayRoutines = routines.filter(
+      (r) => (r.day || "").toLowerCase() === currentDayName.toLowerCase()
+    );
+
+    for (const r of todayRoutines) {
+      const range = parseSlotRange(r.time_slot, r);
+      if (range) {
+        if (nowTotalMins >= range.startMins && nowTotalMins <= range.endMins) {
+          return r;
+        }
+      }
+    }
+    return null;
+  }, [routines, currentClockTime, currentDayName]);
+
+  // Next upcoming routine today for this room if currently between classes
+  const upcomingRoutine = useMemo(() => {
+    if (matchedRealTimeRoutine) return null;
+    if (!routines || routines.length === 0) return null;
+
+    const nowH = currentClockTime.getHours();
+    const nowM = currentClockTime.getMinutes();
+    const nowTotalMins = nowH * 60 + nowM;
+
+    const todayRoutines = routines.filter(
+      (r) => (r.day || "").toLowerCase() === currentDayName.toLowerCase() && !r.is_gap
+    );
+
+    let nextR = null;
+    let minDiff = Infinity;
+
+    for (const r of todayRoutines) {
+      const range = parseSlotRange(r.time_slot, r);
+      if (range && range.startMins > nowTotalMins) {
+        const diff = range.startMins - nowTotalMins;
+        if (diff < minDiff) {
+          minDiff = diff;
+          nextR = r;
+        }
+      }
+    }
+    return nextR;
+  }, [routines, matchedRealTimeRoutine, currentClockTime, currentDayName]);
+
+  // Active Effective Routine (Manual override if selected, otherwise automatic real-time matched routine, or first room routine)
+  const activeEffectiveRoutine = useMemo(() => {
+    if (manualSelectedRoutineId) {
+      const manual = routines.find((r) => r.id === manualSelectedRoutineId);
+      if (manual) return manual;
+    }
+    if (matchedRealTimeRoutine) return matchedRealTimeRoutine;
+    if (upcomingRoutine) return upcomingRoutine;
+    return routines.find((r) => !r.is_gap) || routines[0] || null;
+  }, [manualSelectedRoutineId, matchedRealTimeRoutine, upcomingRoutine, routines]);
+
+  // Active Course Identifiers
+  const activeCourseCode = activeEffectiveRoutine?.course_code || "CSE-311";
+  const activeCourseName = activeEffectiveRoutine?.course_name || "Academic Class";
+  const activeTimeSlot = activeEffectiveRoutine?.time_slot || "09:00 AM - 09:50 AM";
+  const isClassCurrentlyLive = !!matchedRealTimeRoutine && !matchedRealTimeRoutine.is_gap;
+  const isGapOrBreak = !!matchedRealTimeRoutine?.is_gap;
+
+  // Fetch classroom session status from backend
   const fetchClassroomStatus = useCallback(async () => {
     if (!selectedRoomId || !activeCourseCode) return;
     try {
@@ -174,9 +256,8 @@ export function ClassroomMonitor() {
     fetchClassroomStatus();
   }, [fetchClassroomStatus]);
 
-  // Reset current classroom session
+  // Reset current classroom session (Fresh testing count)
   const handleResetSession = async () => {
-    if (!confirm(`Are you sure you want to reset attendance for ${activeCourseCode} in this room?`)) return;
     try {
       await api.resetClassroomSession(selectedRoomId, activeCourseCode);
       setClassroomData({
@@ -188,37 +269,43 @@ export function ClassroomMonitor() {
         roster: [],
         event_logs: [],
       });
-      addToast(`Classroom attendance session reset for ${activeCourseCode}`, "success");
+      addToast(`🔄 Attendance reset to 0 for ${activeCourseCode}! Ready for fresh detection.`, "success");
       fetchClassroomStatus();
     } catch (e) {
       addToast("Failed to reset session", "error");
     }
   };
 
-  // Camera start / stop
-  const startCamera = async () => {
+  // Start Camera Stream
+  const startCamera = useCallback(async () => {
     try {
       setCameraError("");
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+
       const constraints = {
-        video: {
-          deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
+        video: selectedDeviceId
+          ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+        audio: false,
       };
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play();
+          setIsCameraActive(true);
+        };
       }
-      setIsCameraActive(true);
     } catch (err) {
       console.error("Camera access error:", err);
-      setCameraError(err.message || "Failed to start camera. Check permissions.");
+      setCameraError(err.message || "Failed to access classroom camera feed");
       setIsCameraActive(false);
     }
-  };
+  }, [selectedDeviceId]);
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -231,174 +318,114 @@ export function ClassroomMonitor() {
     setIsCameraActive(false);
   };
 
-  // Process live video frame loop
-  useEffect(() => {
-    let animationFrameId;
+  // Process live video frame loop (Smooth ~4 FPS with offscreen snapshot)
+  const processFrame = useCallback(async () => {
+    if (!videoRef.current || !canvasRef.current || isProcessingRef.current) return;
+    if (videoRef.current.readyState < 2) return;
 
-    const processLoop = async () => {
-      if (
-        !isCameraActive ||
-        !videoRef.current ||
-        !canvasRef.current ||
-        videoRef.current.readyState < 2 ||
-        isProcessingRef.current
-      ) {
-        animationFrameId = requestAnimationFrame(processLoop);
-        return;
+    isProcessingRef.current = true;
+    const startTime = performance.now();
+
+    try {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
       }
 
-      isProcessingRef.current = true;
-      const startTime = performance.now();
+      // Snapshot to offscreen canvas
+      const captureCanvas = document.createElement("canvas");
+      captureCanvas.width = 640;
+      captureCanvas.height = Math.round((video.videoHeight / video.videoWidth) * 640) || 480;
+      const ctx = captureCanvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+      const b64Image = captureCanvas.toDataURL("image/jpeg", 0.7);
 
-      try {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d");
+      // Call Classroom Monitoring API
+      const result = await api.processClassroomFrame({
+        image: b64Image,
+        room_id: selectedRoomId || "room-101",
+        department: activeEffectiveRoutine?.department || "ALL",
+        course_code: activeCourseCode,
+        course_name: activeCourseName,
+        day: currentDayName,
+        time_slot: activeTimeSlot,
+        absence_threshold_sec: absenceThresholdSec,
+        threshold: threshold || 0.45,
+      });
 
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-          canvas.width = video.videoWidth || 640;
-          canvas.height = video.videoHeight || 480;
-        }
+      const faces = result.faces || [];
+      const latency = Math.round(performance.now() - startTime);
 
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageB64 = canvas.toDataURL("image/jpeg", 0.72);
+      setInferenceTime(latency);
+      setFaceCount(faces.length);
 
-        // Send frame to classroom surveillance endpoint
-        const res = await api.processClassroomFrame({
-          image: imageB64,
-          room_id: selectedRoomId || "default_room",
-          department: selectedDept || "Computer Science & Engineering (CSE)",
-          course_code: activeCourseCode,
-          course_name: activeCourseName,
-          day: selectedDay,
-          time_slot: activeTimeSlot,
-          absence_threshold_sec: absenceThresholdSec,
-          threshold: threshold || 0.363,
+      if (result.classroom) {
+        setClassroomData({
+          total_enrolled: result.classroom.total_enrolled || 0,
+          present_count: result.classroom.present_count || 0,
+          stepped_out_count: result.classroom.stepped_out_count || 0,
+          absent_count: result.classroom.absent_count || 0,
+          guest_count: result.classroom.guest_count || 0,
+          roster: result.classroom.roster || [],
+          event_logs: result.classroom.event_logs || [],
         });
-
-        const elapsed = Math.round(performance.now() - startTime);
-        setInferenceTime(elapsed);
-
-        // Calculate FPS
-        const now = performance.now();
-        fpsTracker.current.count++;
-        if (now - fpsTracker.current.lastTime >= 1000) {
-          setFps(fpsTracker.current.count);
-          fpsTracker.current.count = 0;
-          fpsTracker.current.lastTime = now;
-        }
-
-        if (res.success && res.classroom) {
-          setClassroomData({
-            total_enrolled: res.classroom.total_enrolled || 0,
-            present_count: res.classroom.present_count || 0,
-            stepped_out_count: res.classroom.stepped_out_count || 0,
-            absent_count: res.classroom.absent_count || 0,
-            guest_count: res.classroom.guest_count || 0,
-            roster: res.classroom.roster || [],
-            event_logs: res.classroom.event_logs || [],
-          });
-          setFaceCount(res.faces_count || 0);
-
-          // Draw custom Classroom Overlays
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          if (res.faces && res.faces.length > 0) {
-            res.faces.forEach((face) => {
-              const bbox = face.bbox;
-              if (!bbox) return;
-
-              let x = bbox[0];
-              const y = bbox[1];
-              const w = bbox[2] - bbox[0];
-              const h = bbox[3] - bbox[1];
-
-              if (isMirrored) {
-                x = canvas.width - bbox[2];
-              }
-
-              const isEnrolled = face.is_enrolled;
-              const isRecognized = face.is_recognized;
-              const candName = face.name || "Student";
-              const rollId = face.roll_id || "";
-
-              let strokeColor = "#ef4444"; // Red (Unrecognized)
-              let badgeBg = "rgba(239, 68, 68, 0.9)";
-              let statusLabel = "UNREGISTERED";
-
-              if (isRecognized && isEnrolled) {
-                strokeColor = "#10b981"; // Emerald
-                badgeBg = "rgba(16, 185, 129, 0.9)";
-                statusLabel = "PRESENT (ENROLLED)";
-              } else if (isRecognized && !isEnrolled) {
-                strokeColor = "#f59e0b"; // Amber
-                badgeBg = "rgba(245, 158, 11, 0.9)";
-                statusLabel = "GUEST / OTHER DEPT";
-              }
-
-              // Bounding box
-              ctx.strokeStyle = strokeColor;
-              ctx.lineWidth = 3;
-              ctx.beginPath();
-              ctx.roundRect(x, y, w, h, 8);
-              ctx.stroke();
-
-              // Top Name tag
-              ctx.fillStyle = badgeBg;
-              const tagText = isRecognized ? `${candName} ${rollId ? `(${rollId})` : ""}` : "UNKNOWN FACE";
-              ctx.font = "bold 13px Inter, sans-serif";
-              const textMetrics = ctx.measureText(tagText);
-              const tagHeight = 22;
-              const tagWidth = textMetrics.width + 16;
-
-              ctx.beginPath();
-              ctx.roundRect(x, y - tagHeight - 4 < 0 ? y : y - tagHeight - 4, tagWidth, tagHeight, 4);
-              ctx.fill();
-
-              ctx.fillStyle = "#ffffff";
-              ctx.fillText(tagText, x + 8, (y - tagHeight - 4 < 0 ? y : y - tagHeight - 4) + 15);
-
-              // Bottom Status tag
-              ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
-              ctx.font = "bold 11px Inter, sans-serif";
-              const statusMetrics = ctx.measureText(statusLabel);
-              const statusTagWidth = statusMetrics.width + 12;
-
-              ctx.beginPath();
-              ctx.roundRect(x, y + h + 4, statusTagWidth, 18, 4);
-              ctx.fill();
-
-              ctx.fillStyle = strokeColor;
-              ctx.fillText(statusLabel, x + 6, y + h + 17);
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("Classroom frame processing error:", err);
-      } finally {
-        isProcessingRef.current = false;
-        animationFrameId = requestAnimationFrame(processLoop);
       }
-    };
 
-    if (isCameraActive) {
-      animationFrameId = requestAnimationFrame(processLoop);
+      // Draw high-FPS Cyber HUD overlays
+      drawClassroomFaceDetections(
+        canvas,
+        faces,
+        isMirrored,
+        captureCanvas.width,
+        captureCanvas.height
+      );
+
+      // Telemetry FPS
+      fpsTracker.current.count++;
+      const now = performance.now();
+      if (now - fpsTracker.current.lastTime >= 1000) {
+        setFps(Math.round((fpsTracker.current.count * 1000) / (now - fpsTracker.current.lastTime)));
+        fpsTracker.current.count = 0;
+        fpsTracker.current.lastTime = now;
+      }
+    } catch (err) {
+      console.warn("Classroom monitoring loop error:", err);
+    } finally {
+      isProcessingRef.current = false;
     }
-
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
   }, [
-    isCameraActive,
     selectedRoomId,
-    selectedDept,
+    activeEffectiveRoutine,
     activeCourseCode,
     activeCourseName,
-    selectedDay,
+    currentDayName,
     activeTimeSlot,
     absenceThresholdSec,
     threshold,
     isMirrored,
   ]);
+
+  // Auto-start camera on mount
+  useEffect(() => {
+    startCamera();
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, [startCamera]);
+
+  // Run steady loop
+  useEffect(() => {
+    let intervalId;
+    if (isCameraActive) {
+      intervalId = setInterval(processFrame, 250);
+    }
+    return () => clearInterval(intervalId);
+  }, [isCameraActive, processFrame]);
 
   // Filtered Roster
   const filteredRoster = classroomData.roster.filter((candidate) => {
@@ -415,517 +442,443 @@ export function ClassroomMonitor() {
   const selectedRoomObj = rooms.find((r) => r.id === selectedRoomId);
 
   return (
-    <div className="flex flex-col gap-4 p-4 min-h-[calc(100vh-140px)] bg-slate-950 text-slate-100 animate-fadeIn">
-      {/* 1. TOP HEADER: Active Classroom Surveillance Session Config Bar */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/40 border border-indigo-500/20 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-neon-indigo">
-            <GraduationCap className="w-6 h-6" />
+    <div className="flex flex-col gap-4">
+      {/* 0. CLASSROOM SELECTOR & REAL-TIME ROUTINE SYNC BAR */}
+      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/95 to-indigo-950/40 border border-indigo-500/30 shadow-xl flex flex-wrap items-center justify-between gap-3 backdrop-blur-md">
+        {/* Left: Classroom Selector Dropdown */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-neon-indigo flex-shrink-0">
+            <Building2 className="w-5 h-5" />
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-black text-white tracking-wide flex items-center gap-2">
-                Classroom AI Surveillance
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 animate-pulse">
-                  Auto-Attendance
-                </span>
-              </h2>
-            </div>
-            <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-              <span>Pure AI Camera Detection & Presence Monitoring</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-indigo-300 font-semibold">No Card Punch Required</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Room, Dept, Day & Routine Selectors */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Room Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5 text-xs">
-            <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-            <select
-              value={selectedRoomId}
-              onChange={(e) => setSelectedRoomId(e.target.value)}
-              className="bg-transparent text-white font-bold outline-none cursor-pointer pr-2"
-            >
-              {rooms.map((r) => (
-                <option key={r.id} value={r.id} className="bg-slate-900 text-white">
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Department Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5 text-xs">
-            <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
-            <select
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="bg-transparent text-white font-bold outline-none cursor-pointer pr-2 max-w-[150px] truncate"
-            >
-              <option value="ALL" className="bg-slate-900 text-white">All Departments</option>
-              {departments.map((d) => (
-                <option key={d.id || d.name} value={d.name} className="bg-slate-900 text-white">
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Day Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-amber-400" />
-            <select
-              value={selectedDay}
-              onChange={(e) => setSelectedDay(e.target.value)}
-              className="bg-transparent text-white font-bold outline-none cursor-pointer pr-2"
-            >
-              {daysOfWeek.map((d) => (
-                <option key={d} value={d} className="bg-slate-900 text-white">
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Active Routine Time Slot Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-950/80 border border-indigo-500/40 rounded-xl px-3 py-1.5 text-xs shadow-inner">
-            <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-            {routines.length > 0 ? (
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider flex items-center gap-1">
+              Select Monitored Classroom:
+            </span>
+            <div className="flex items-center gap-2 mt-0.5">
               <select
-                value={selectedRoutine?.id || ""}
+                value={selectedRoomId}
                 onChange={(e) => {
-                  const match = routines.find((r) => r.id === e.target.value);
-                  if (match) {
-                    setSelectedRoutine(match);
-                    setCustomCourseCode(match.course_code || "");
-                    setCustomCourseName(match.course_name || "");
-                  }
+                  setSelectedRoomId(e.target.value);
+                  setManualSelectedRoutineId("");
                 }}
-                className="bg-transparent text-indigo-200 font-bold outline-none cursor-pointer pr-2 max-w-[180px] truncate"
+                className="bg-slate-950 border border-indigo-500/40 rounded-xl px-3 py-1.5 text-xs text-white font-bold font-mono outline-none focus:border-cyan-400 transition cursor-pointer shadow-inner pr-8"
               >
-                {routines.map((r) => (
-                  <option key={r.id} value={r.id} className="bg-slate-900 text-white">
-                    {r.time_slot}: {r.course_code} - {r.course_name}
+                {rooms.map((r) => (
+                  <option key={r.id} value={r.id} className="bg-slate-900 text-white font-mono">
+                    {r.name} {r.capacity ? `(${r.capacity} Seats)` : ""}
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Center: Live Clock & Real-Time Routine Status Badge */}
+        <div className="flex flex-col items-start">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <span className="flex items-center gap-1.5 text-slate-300 font-bold bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-800">
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              {currentDayName}, {currentClockTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+
+            {isClassCurrentlyLive ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                Live Class: {activeCourseCode} • {activeTimeSlot}
+              </span>
+            ) : isGapOrBreak ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                ☕ Recess / Free Interval • {activeTimeSlot}
+              </span>
+            ) : upcomingRoutine ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">
+                ⏳ Next Up: {upcomingRoutine.course_code} ({upcomingRoutine.time_slot})
+              </span>
             ) : (
-              <div className="flex items-center gap-1">
-                <input
-                  type="text"
-                  placeholder="Course Code"
-                  value={customCourseCode}
-                  onChange={(e) => setCustomCourseCode(e.target.value)}
-                  className="bg-transparent text-indigo-300 font-bold w-20 outline-none text-xs"
-                />
-              </div>
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700">
+                ⚪ Camera Standby
+              </span>
             )}
           </div>
 
-          {/* Reset Session Button */}
-          <button
-            onClick={handleResetSession}
-            title="Reset today's class attendance session"
-            className="p-2 rounded-xl bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 border border-slate-800 hover:border-rose-500/40 transition"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+          <div className="text-[11px] text-slate-400 font-mono mt-1 truncate max-w-md">
+            {activeEffectiveRoutine ? (
+              <span>
+                <strong className="text-white font-semibold">{activeCourseName}</strong>
+                {activeEffectiveRoutine.instructor ? ` • Instructor: ${activeEffectiveRoutine.instructor}` : ""}
+                {activeEffectiveRoutine.section ? ` (${activeEffectiveRoutine.section})` : ""}
+              </span>
+            ) : (
+              "No routine slots configured for this room yet."
+            )}
+          </div>
+        </div>
 
-          {/* Settings Modal Button */}
+        {/* Right: Quick Routine Slot Selector / Override */}
+        <div className="flex items-center gap-2">
+          {routines.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
+              <span className="text-[10px] text-slate-400 font-mono hidden md:inline">Slot:</span>
+              <select
+                value={activeEffectiveRoutine?.id || ""}
+                onChange={(e) => setManualSelectedRoutineId(e.target.value)}
+                className="bg-transparent text-indigo-300 font-bold font-mono outline-none text-xs cursor-pointer max-w-[170px] truncate"
+                title="Manually override or pick class slot"
+              >
+                {matchedRealTimeRoutine && (
+                  <option value={matchedRealTimeRoutine.id} className="bg-slate-900 text-emerald-300 font-bold">
+                    ⚡ Auto Live: {matchedRealTimeRoutine.time_slot} ({matchedRealTimeRoutine.course_code})
+                  </option>
+                )}
+                {routines.map((r) => (
+                  <option key={r.id} value={r.id} className="bg-slate-900 text-white">
+                    {r.day} • {r.time_slot} • {r.course_code}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 1. TOP SURVEILLANCE KPI BANNER */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total Enrolled In Class */}
+        <div className="glass-card p-3 flex flex-col gap-1 border-l-4 border-l-indigo-500">
+          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-indigo-400" />
+            Enrolled In Class
+          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-indigo-400">
+              {classroomData.total_enrolled}
+            </span>
+            <span className="text-[10px] text-slate-500">Students</span>
+          </div>
+        </div>
+
+        {/* Present (In Seat) */}
+        <div className="glass-card p-3 flex flex-col gap-1 border-l-4 border-l-emerald-500">
+          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+            Present (In Seat)
+          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-emerald-400">
+              {classroomData.present_count}
+            </span>
+            <span className="text-[10px] text-emerald-500/80">Active</span>
+          </div>
+        </div>
+
+        {/* Stepped Out */}
+        <div className={`glass-card p-3 flex flex-col gap-1 border-l-4 ${
+          classroomData.stepped_out_count > 0 ? "border-l-amber-500 bg-amber-950/20 animate-pulse" : "border-l-slate-700"
+        }`}>
+          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+            <Footprints className="w-3.5 h-3.5 text-amber-400" />
+            Stepped Out
+          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-amber-400">
+              {classroomData.stepped_out_count}
+            </span>
+            <span className="text-[10px] text-amber-500/80">&gt;{absenceThresholdSec}s away</span>
+          </div>
+        </div>
+
+        {/* Absent / Not In */}
+        <div className="glass-card p-3 flex flex-col gap-1 border-l-4 border-l-rose-500">
+          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+            <UserX className="w-3.5 h-3.5 text-rose-400" />
+            Absent / Not In
+          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-rose-400">
+              {classroomData.absent_count}
+            </span>
+            <span className="text-[10px] text-slate-500">Missing</span>
+          </div>
+        </div>
+
+        {/* Attendance Rate */}
+        <div className="glass-card p-3 flex flex-col gap-1 border-l-4 border-l-cyan-500">
+          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            Attendance Rate
+          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-cyan-300">
+              {classroomData.total_enrolled > 0
+                ? `${Math.round(((classroomData.present_count + classroomData.stepped_out_count) / classroomData.total_enrolled) * 100)}%`
+                : "0%"}
+            </span>
+            <span className="text-[10px] text-cyan-500/80">{activeCourseCode}</span>
+          </div>
+        </div>
+
+        {/* Surveillance Settings & Reset */}
+        <div className="glass-card p-3 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-400">Class Config</span>
+            <button
+              onClick={handleResetSession}
+              title="Reset class session attendance"
+              className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <button
             onClick={() => setShowConfigModal(true)}
-            title="Absence & Detection Sensitivity"
-            className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition"
+            className="w-full py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] flex items-center justify-center gap-1.5 transition border border-slate-700 hover:border-indigo-500/40"
+            title="Configure Classroom Absence Timeout and Sensitivity"
           >
-            <Sliders className="w-4 h-4" />
+            <Sliders className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+            <span className="truncate">Absence: {absenceThresholdSec}s</span>
           </button>
         </div>
       </div>
 
-      {/* 2. STATS SUMMARY BAR */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
-              <Users className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Enrolled In Class</div>
-              <div className="text-xl font-black text-white">{classroomData.total_enrolled}</div>
-            </div>
-          </div>
-          <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/30">
-            {activeCourseCode}
-          </span>
-        </div>
-
-        <div className="p-3 rounded-xl bg-slate-900/90 border border-emerald-500/20 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20 shadow-neon-green">
-              <UserCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Present (In Seat)</div>
-              <div className="text-xl font-black text-emerald-400">{classroomData.present_count}</div>
-            </div>
-          </div>
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-        </div>
-
-        <div className="p-3 rounded-xl bg-slate-900/90 border border-amber-500/20 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
-              <Footprints className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Stepped Out</div>
-              <div className="text-xl font-black text-amber-400">{classroomData.stepped_out_count}</div>
-            </div>
-          </div>
-          <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-            &gt;{absenceThresholdSec}s away
-          </span>
-        </div>
-
-        <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
-              <UserX className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Absent / Not In</div>
-              <div className="text-xl font-black text-rose-400">{classroomData.absent_count}</div>
-            </div>
-          </div>
-          <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
-            {classroomData.total_enrolled > 0
-              ? `${Math.round(((classroomData.present_count + classroomData.stepped_out_count) / classroomData.total_enrolled) * 100)}% Attend`
-              : "0%"}
-          </span>
-        </div>
-      </div>
-
-      {/* 3. MAIN 3-COLUMN LAYOUT: Roster (Left) | Camera View (Center) | Live Events (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1">
-        {/* LEFT COLUMN: ENROLLED STUDENT ROSTER (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col bg-slate-900/90 rounded-2xl border border-slate-800/80 p-3.5 overflow-hidden shadow-lg">
-          <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-black text-white flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-cyan-400" />
-                Enrolled Class Roster
-              </h3>
-              <span className="text-[11px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
-                {filteredRoster.length}
-              </span>
-            </div>
-
-            {/* Status Filter Tabs */}
-            <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
-              {["ALL", "PRESENT", "STEPPED_OUT", "ABSENT"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setRosterFilter(tab)}
-                  className={`px-2 py-0.5 rounded font-bold transition ${
-                    rosterFilter === tab
-                      ? "bg-indigo-600 text-white shadow-sm"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {tab === "ALL" ? "All" : tab === "PRESENT" ? "In" : tab === "STEPPED_OUT" ? "Out" : "Abs"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Search bar */}
-          <div className="pt-2.5 pb-2">
-            <input
-              type="text"
-              placeholder="Search enrolled student name or roll..."
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition"
-            />
-          </div>
-
-          {/* Student List */}
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar max-h-[520px]">
-            {filteredRoster.length === 0 ? (
-              <div className="py-12 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
-                <Users className="w-8 h-8 opacity-40 text-slate-400" />
-                <p>No enrolled students found for this course/filter.</p>
-                <p className="text-[10px] text-slate-600">Assign students in Course Manager or pick another course.</p>
-              </div>
-            ) : (
-              filteredRoster.map((candidate) => {
-                const isPresent = candidate.status === "PRESENT";
-                const isSteppedOut = candidate.status === "STEPPED_OUT";
-                const isAbsent = candidate.status === "ABSENT";
-
-                return (
-                  <div
-                    key={candidate.id}
-                    onClick={() => setSelectedHistoryCandidate(candidate)}
-                    className={`p-2.5 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 hover:translate-x-0.5 ${
-                      isPresent
-                        ? "bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/60"
-                        : isSteppedOut
-                        ? "bg-amber-950/20 border-amber-500/30 hover:border-amber-500/60 animate-pulse"
-                        : "bg-slate-950/60 border-slate-800/80 hover:border-slate-700 opacity-70 hover:opacity-100"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                          isPresent
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                            : isSteppedOut
-                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                            : "bg-slate-800 text-slate-400 border border-slate-700"
-                        }`}
-                      >
-                        {candidate.name?.substring(0, 2).toUpperCase() || "ST"}
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                          {candidate.name}
-                          {candidate.roll_id && (
-                            <span className="text-[10px] font-mono text-slate-400">
-                              #{candidate.roll_id}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                          {isPresent && (
-                            <span className="text-emerald-400 font-medium">
-                              In at {candidate.first_detected_time} ({Math.round((candidate.in_class_seconds || 0) / 60)}m in class)
-                            </span>
-                          )}
-                          {isSteppedOut && (
-                            <span className="text-amber-400 font-medium">
-                              Left at {candidate.stepped_out_time} (Away: {candidate.stepped_out_duration_sec || 0}s)
-                            </span>
-                          )}
-                          {isAbsent && (
-                            <span className="text-slate-500">Not detected yet</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end flex-shrink-0">
-                      <span
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ${
-                          isPresent
-                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                            : isSteppedOut
-                            ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                            : "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                        }`}
-                      >
-                        {candidate.status}
-                      </span>
-                      <span className="text-[9px] text-indigo-400 hover:underline mt-1 flex items-center gap-0.5">
-                        <History className="w-2.5 h-2.5" /> Log
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* CENTER COLUMN: LIVE AI CAMERA STREAM & DETECTION CANVAS (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col bg-slate-900/90 rounded-2xl border border-slate-800/80 p-3.5 overflow-hidden shadow-lg">
-          <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-black text-white flex items-center gap-1.5">
-                <Camera className="w-4 h-4 text-indigo-400" />
-                Live Room Camera
-              </h3>
-              {isCameraActive && (
-                <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  LIVE
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                {fps} FPS
-              </span>
-              <span className="text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                {inferenceTime}ms
-              </span>
-              <span className="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/30">
-                {faceCount} Faces
-              </span>
-            </div>
-          </div>
-
-          {/* Camera Viewport */}
-          <div className="relative flex-1 min-h-[360px] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 my-2.5 flex items-center justify-center">
-            {cameraError && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-4 bg-slate-950/90 text-center">
-                <AlertTriangle className="w-10 h-10 text-rose-500 mb-2" />
-                <p className="text-sm font-bold text-white mb-1">Camera Initialization Error</p>
-                <p className="text-xs text-rose-400 max-w-sm mb-4">{cameraError}</p>
-                <button
-                  onClick={startCamera}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg"
-                >
-                  <RefreshCw className="w-4 h-4" /> Retry Access
-                </button>
-              </div>
-            )}
-
-            {!isCameraActive && !cameraError && (
-              <div className="flex flex-col items-center justify-center text-center p-6 gap-3">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-neon-indigo">
-                  <Camera className="w-8 h-8" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">Classroom AI Vision Inactive</h4>
-                  <p className="text-xs text-slate-400 max-w-xs mt-1">
-                    Start live camera feed to automatically track enrolled student presence and absence duration.
-                  </p>
-                </div>
-                <button
-                  onClick={startCamera}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs transition shadow-neon-indigo flex items-center gap-2 mt-1"
-                >
-                  <Camera className="w-4 h-4" /> Start Surveillance
-                </button>
-              </div>
-            )}
-
-            {/* Video & Canvas Stream */}
+      {/* 2. DUAL PANEL: LIVE SURVEILLANCE FEED & STUDENT PRESENCE ROSTER */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* LEFT 7 COLS: LIVE CAMERA & HUD */}
+        <div className="lg:col-span-7 flex flex-col gap-3">
+          <div className="relative w-full aspect-video rounded-xl overflow-hidden glass-panel border-2 border-indigo-500/40 bg-slate-950 flex items-center justify-center shadow-2xl">
             <video
               ref={videoRef}
               playsInline
               muted
-              className={`absolute inset-0 w-full h-full object-cover ${
-                isMirrored ? "scale-x-[-1]" : ""
-              } ${isCameraActive ? "opacity-100" : "opacity-0"}`}
+              className={`w-full h-full object-cover ${isMirrored ? "-scale-x-100" : ""}`}
             />
             <canvas
               ref={canvasRef}
-              className={`absolute inset-0 w-full h-full pointer-events-none ${
-                isCameraActive ? "opacity-100" : "opacity-0"
-              }`}
+              className="absolute inset-0 w-full h-full pointer-events-none z-10"
             />
 
-            {/* Floating Top Indicator when camera is live */}
-            {isCameraActive && (
-              <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-2">
-                <div className="px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-md border border-slate-700/60 text-[10px] font-bold text-slate-200 flex items-center gap-1.5 shadow-md">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  {selectedRoomObj?.name || "Auditorium / Hall"} • {activeCourseCode}
-                </div>
-              </div>
-            )}
-          </div>
+            {/* Indigo Surveillance HUD Scanner Grid */}
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-500/5 via-transparent to-black/40" />
 
-          {/* Camera Controls Bar */}
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <div className="flex items-center gap-2">
-              {isCameraActive ? (
-                <button
-                  onClick={stopCamera}
-                  className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
-                >
-                  <Camera className="w-3.5 h-3.5" /> Stop Camera
-                </button>
-              ) : (
+            {/* Camera Status Overlay */}
+            {!isCameraActive && (
+              <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center gap-3 p-6 text-center z-20">
+                <Camera className="w-12 h-12 text-slate-500 animate-bounce" />
+                <h3 className="text-base font-bold text-white">Connecting Classroom Surveillance Camera</h3>
+                {cameraError ? (
+                  <p className="text-xs text-rose-400 font-mono max-w-sm">{cameraError}</p>
+                ) : (
+                  <p className="text-xs text-slate-400">Initializing Classroom AI Face Recognition & Attendance Grid...</p>
+                )}
                 <button
                   onClick={startCamera}
-                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md"
+                  className="mt-2 px-4 py-2 rounded-lg bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 hover:bg-indigo-400 transition shadow-neon-indigo"
                 >
-                  <Camera className="w-3.5 h-3.5" /> Start Camera
+                  <RefreshCw className="w-3.5 h-3.5" /> Start Classroom Camera
                 </button>
-              )}
+              </div>
+            )}
+
+            {/* Top Viewport Header Tag */}
+            <div className="absolute top-3 left-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-950/85 border border-indigo-500/50 text-[11px] font-mono text-slate-200 backdrop-blur-md">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-bold text-emerald-400">CLASSROOM SURVEILLANCE</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-indigo-300 font-semibold">{selectedRoomObj?.name || "Room 101"}</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-cyan-400 font-semibold">{activeCourseCode}</span>
             </div>
 
-            <div className="text-[11px] text-slate-400 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Enrolled
-              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block ml-1.5" /> Guest
-              <span className="w-2 h-2 rounded-full bg-rose-400 inline-block ml-1.5" /> Unknown
+            {/* Auto Attendance Mode Badge */}
+            <div className="absolute top-3 right-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-950/85 border border-slate-700 text-[11px] font-mono text-indigo-300 backdrop-blur-md">
+              <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Auto-Attendance: <strong className="text-emerald-400 font-bold">ACTIVE</strong></span>
+            </div>
+          </div>
+
+          {/* Telemetry Bar Under Video */}
+          <div className="w-full glass-card px-4 py-2 flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+            <div className="flex items-center gap-2">
+              <Activity className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-slate-400">Surveillance FPS:</span>
+              <span className="font-bold text-indigo-400">{fps}</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Latency:</span>
+              <span className="font-bold text-emerald-400">{inferenceTime} ms</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Faces in View:</span>
+              <span className="font-bold text-amber-400">{faceCount}</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">Absence Rule:</span>
+              <span className="font-bold text-rose-400">&gt;{absenceThresholdSec}s</span>
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: LIVE MOVEMENT & ATTENDANCE EVENT DIARY (3 cols) */}
-        <div className="lg:col-span-3 flex flex-col bg-slate-900/90 rounded-2xl border border-slate-800/80 p-3.5 overflow-hidden shadow-lg">
-          <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-black text-white flex items-center gap-1.5">
-                <History className="w-4 h-4 text-amber-400" />
-                Live Event Diary
-              </h3>
-            </div>
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-              {classroomData.event_logs.length} Events
-            </span>
-          </div>
-
-          <p className="text-[10px] text-slate-400 mt-2 mb-2">
-            Real-time automated logging of entries, stepped-out durations, and returns during this class.
-          </p>
-
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar max-h-[520px]">
-            {classroomData.event_logs.length === 0 ? (
-              <div className="py-12 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
-                <Footprints className="w-8 h-8 opacity-40 text-slate-400" />
-                <p>No presence events logged yet.</p>
-                <p className="text-[10px] text-slate-600">Events appear when students enter or leave the camera view.</p>
+        {/* RIGHT 5 COLS: STUDENT PRESENCE REGISTRY & LIVE EVENT DIARY */}
+        <div className="lg:col-span-5 flex flex-col gap-3">
+          <div className="glass-card p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Live Student Presence Registry
+                  </h3>
+                  <span className="text-[11px] text-indigo-300 font-mono font-bold">
+                    {activeCourseCode} • {activeCourseName}
+                  </span>
+                </div>
               </div>
-            ) : (
-              classroomData.event_logs.map((ev, index) => {
-                const isEntry = ev.type === "entry" || ev.event === "CLASS_ENTRY";
-                const isOut = ev.type === "out" || ev.event === "STEPPED_OUT";
-                const isReturn = ev.type === "return" || ev.event === "RETURNED";
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetSession}
+                  className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/40 text-[11px] font-mono font-bold transition flex items-center gap-1.5 shadow-sm hover:scale-[1.02]"
+                  title="Reset attendance session count (Fresh Count for Testing)"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                  Reset Count
+                </button>
+                <div className="flex flex-col items-end">
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-bold">
+                    {filteredRoster.length} Students
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-mono mt-0.5">
+                    {selectedRoomObj?.name || "Room"}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-                return (
-                  <div
-                    key={ev.id || index}
-                    className={`p-2 rounded-xl border text-xs flex flex-col gap-1 transition ${
-                      isEntry
-                        ? "bg-emerald-950/20 border-emerald-500/20"
-                        : isOut
-                        ? "bg-amber-950/20 border-amber-500/20"
-                        : "bg-indigo-950/20 border-indigo-500/20"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                          isEntry
-                            ? "bg-emerald-500/20 text-emerald-300"
-                            : isOut
-                            ? "bg-amber-500/20 text-amber-300"
-                            : "bg-indigo-500/20 text-indigo-300"
-                        }`}
-                      >
-                        {ev.event || ev.type}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400">{ev.time}</span>
+            {/* Filter Tabs & Search Bar */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+                  {["ALL", "PRESENT", "STEPPED_OUT", "ABSENT"].map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setRosterFilter(tab)}
+                      className={`px-2 py-0.5 rounded font-bold transition ${
+                        rosterFilter === tab
+                          ? "bg-indigo-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {tab === "ALL" ? "All" : tab === "PRESENT" ? "In Seat" : tab === "STEPPED_OUT" ? "Away" : "Absent"}
+                    </button>
+                  ))}
+                </div>
+
+                <span className="text-[10px] font-mono text-indigo-400">
+                  {activeTimeSlot}
+                </span>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Search student name or roll..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition"
+              />
+            </div>
+
+            {/* Student Presence List */}
+            <div className="flex flex-col gap-2 max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
+              {filteredRoster.length === 0 ? (
+                <div className="py-12 px-4 flex flex-col items-center justify-center text-center gap-2 text-slate-500">
+                  <Users className="w-8 h-8 text-slate-600" />
+                  <p className="text-xs font-semibold text-slate-400">No students detected in this filter.</p>
+                  <p className="text-[11px] text-slate-500 max-w-xs">
+                    Students detected by the classroom camera will automatically appear here with real-time presence status.
+                  </p>
+                </div>
+              ) : (
+                filteredRoster.map((candidate) => {
+                  const isPresent = candidate.status === "PRESENT";
+                  const isSteppedOut = candidate.status === "STEPPED_OUT";
+                  const isAbsent = candidate.status === "ABSENT";
+
+                  return (
+                    <div
+                      key={candidate.id}
+                      onClick={() => setSelectedHistoryCandidate(candidate)}
+                      className={`p-2.5 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 hover:translate-x-0.5 ${
+                        isPresent
+                          ? "bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/60"
+                          : isSteppedOut
+                          ? "bg-amber-950/20 border-amber-500/30 hover:border-amber-500/60 animate-pulse"
+                          : "bg-slate-950/60 border-slate-800/80 hover:border-slate-700 opacity-70 hover:opacity-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+                            isPresent
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                              : isSteppedOut
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                              : "bg-slate-800 text-slate-400 border border-slate-700"
+                          }`}
+                        >
+                          {candidate.name?.substring(0, 2).toUpperCase() || "ST"}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                            {candidate.name}
+                            {candidate.roll_id && (
+                              <span className="text-[10px] font-mono text-slate-400">
+                                #{candidate.roll_id}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                            {isPresent && (
+                              <span className="text-emerald-400 font-medium">
+                                In at {candidate.first_detected_time} ({Math.round((candidate.in_class_seconds || 0) / 60)}m in class)
+                              </span>
+                            )}
+                            {isSteppedOut && (
+                              <span className="text-amber-400 font-medium">
+                                Left at {candidate.stepped_out_time} (Away: {candidate.stepped_out_duration_sec || 0}s)
+                              </span>
+                            )}
+                            {isAbsent && (
+                              <span className="text-slate-500">Not detected yet</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end flex-shrink-0">
+                        <span
+                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ${
+                            isPresent
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : isSteppedOut
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                              : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                          }`}
+                        >
+                          {candidate.status}
+                        </span>
+                        <span className="text-[9px] text-indigo-400 hover:underline mt-1 flex items-center gap-0.5">
+                          <History className="w-2.5 h-2.5" /> Log
+                        </span>
+                      </div>
                     </div>
-
-                    <p className="text-xs text-slate-200 font-medium leading-snug">
-                      {ev.label || `${ev.name} ${ev.event}`}
-                    </p>
-                  </div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>

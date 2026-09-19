@@ -201,3 +201,134 @@ export function drawFaceDetections(
     ctx.restore();
   });
 }
+
+// Dedicated Classroom AI Surveillance Overlay with Enrolled / Guest / Unknown Detection
+export function drawClassroomFaceDetections(
+  canvas,
+  faces,
+  isMirrored = true,
+  frameWidth = 640,
+  frameHeight = 480
+) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!faces || faces.length === 0) return;
+
+  const scaleX = canvas.width / (frameWidth || 640);
+  const scaleY = canvas.height / (frameHeight || 480);
+
+  faces.forEach((face) => {
+    if (!face.bbox || face.bbox.length < 4) return;
+
+    let [origX, origY, origW, origH] = face.bbox;
+
+    let w = origW * scaleX;
+    let h = origH * scaleY;
+    let x = origX * scaleX;
+    let y = origY * scaleY;
+
+    if (isMirrored) {
+      x = canvas.width - x - w;
+    }
+
+    const isRecognized = face.is_recognized;
+    const isEnrolled = face.is_enrolled;
+
+    let primaryColor = "#f43f5e"; // Rose / Red (Unknown)
+    let glowColor = "rgba(244, 63, 94, 0.6)";
+    let badgeName = "⚠️ UNKNOWN PERSON";
+    let badgeId = "Unregistered Face";
+    let badgeStatus = "❌ Not in Database";
+
+    if (isRecognized && isEnrolled) {
+      primaryColor = "#10b981"; // Emerald
+      glowColor = "rgba(16, 185, 129, 0.6)";
+      badgeName = `✅ ${face.name}`;
+      badgeId = `Roll: ${face.roll_id || "N/A"}`;
+      badgeStatus = "🟢 Present (Enrolled)";
+    } else if (isRecognized && !isEnrolled) {
+      primaryColor = "#f59e0b"; // Amber
+      glowColor = "rgba(245, 158, 11, 0.6)";
+      badgeName = `⚠️ ${face.name}`;
+      badgeId = `Roll: ${face.roll_id || "N/A"}`;
+      badgeStatus = "⚠️ Guest / Other Class";
+    }
+
+    ctx.save();
+
+    // 1. Draw glowing HUD corner brackets
+    ctx.strokeStyle = primaryColor;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 14;
+
+    const cornerLen = Math.min(24, w * 0.28, h * 0.28);
+
+    // Top-Left
+    ctx.beginPath();
+    ctx.moveTo(x, y + cornerLen);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + cornerLen, y);
+    ctx.stroke();
+
+    // Top-Right
+    ctx.beginPath();
+    ctx.moveTo(x + w - cornerLen, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w, y + cornerLen);
+    ctx.stroke();
+
+    // Bottom-Left
+    ctx.beginPath();
+    ctx.moveTo(x, y + h - cornerLen);
+    ctx.lineTo(x, y + h);
+    ctx.lineTo(x + cornerLen, y + h);
+    ctx.stroke();
+
+    // Bottom-Right
+    ctx.beginPath();
+    ctx.moveTo(x + w - cornerLen, y + h);
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x + w, y + h - cornerLen);
+    ctx.stroke();
+
+    // Subtle bounding border
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+
+    // 2. HUD Info Card directly attached to bounding box
+    const cardW = Math.max(190, w);
+    const cardH = 52;
+    const cardY = y > cardH + 12 ? y - cardH - 8 : y + h + 8;
+    const cardX = Math.max(10, Math.min(x, canvas.width - cardW - 10));
+
+    // Semi-transparent dark glass panel
+    ctx.fillStyle = "rgba(6, 11, 22, 0.94)";
+    ctx.strokeStyle = primaryColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(cardX, cardY, cardW, cardH, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    // Left accent color indicator
+    ctx.fillStyle = primaryColor;
+    ctx.fillRect(cardX + 2, cardY + 6, 4, cardH - 12);
+
+    // Line 1: Student Name
+    ctx.fillStyle = "#ffffff";
+    ctx.font = 'bold 12px "Outfit", system-ui, sans-serif';
+    ctx.fillText(badgeName, cardX + 12, cardY + 18);
+
+    // Line 2: Roll / ID & Status
+    ctx.fillStyle = primaryColor;
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
+    ctx.fillText(`${badgeId} • ${badgeStatus}`, cardX + 12, cardY + 36);
+
+    ctx.restore();
+  });
+}

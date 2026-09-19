@@ -161,5 +161,39 @@
     "semester": "",
     "remarks": "",
     "updated_at": "2026-09-20T00:20:23.431588"
+  },
+  {
+    "id": "rt-0709ccdf",
+    "room_id": "room-101",
+    "department": "Computer Science & Engineering",
+    "day": "Sunday",
+    "time_slot": "12:10 AM - 03:00 AM",
+    "start_time": "12:10 AM",
+    "end_time": "03:00 AM",
+    "is_gap": false,
+    "course_code": "CSE-2101",
+    "course_name": "Data Structures & Algorithms",
+    "instructor": "",
+    "section": "Section A",
+    "semester": "1st",
+    "remarks": "",
+    "updated_at": "2026-09-20T00:54:52.753105"
+  },
+  {
+    "id": "rt-bdee43cf",
+    "room_id": "room-101",
+    "department": "Computer Science & Engineering",
+    "day": "Sunday",
+    "time_slot": "12:10 AM - 03:10 AM",
+    "start_time": "00:10",
+    "end_time": "03:10",
+    "is_gap": false,
+    "course_code": "CSE-2101",
+    "course_name": "Data Structures & Algorithms",
+    "instructor": "",
+    "section": "Section A",
+    "semester": "1st",
+    "remarks": "",
+    "updated_at": "2026-09-20T01:00:07.309651"
   }
 ]

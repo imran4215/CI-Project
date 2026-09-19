@@ -77,7 +77,7 @@ class Verify3FactorRequest(BaseModel):
     face_image: Optional[str] = None
     active_room_id: Optional[str] = None
     signature_threshold: Optional[float] = 0.50
-    face_threshold: Optional[float] = 0.363
+    face_threshold: Optional[float] = 0.45
 
 class VerifySignatureRequest(BaseModel):
     candidate_id: str
@@ -86,7 +86,7 @@ class VerifySignatureRequest(BaseModel):
 
 class RecognizeRequest(BaseModel):
     image: str
-    threshold: Optional[float] = 0.363
+    threshold: Optional[float] = 0.45
     active_room_id: Optional[str] = None
 
 class AttendanceActionRequest(BaseModel):
@@ -235,7 +235,7 @@ class BatchClassRoutineRequest(BaseModel):
 class MonitoringFrameRequest(BaseModel):
     image: str
     active_room_id: Optional[str] = None
-    threshold: Optional[float] = 0.363
+    threshold: Optional[float] = 0.45
 
 class ClassroomFrameRequest(BaseModel):
     image: str
@@ -246,7 +246,7 @@ class ClassroomFrameRequest(BaseModel):
     day: Optional[str] = None
     time_slot: Optional[str] = None
     absence_threshold_sec: Optional[int] = 45
-    threshold: Optional[float] = 0.363
+    threshold: Optional[float] = 0.45
 
 class UpdateMonitoringConfigRequest(BaseModel):
     absence_threshold_sec: Optional[int] = None
