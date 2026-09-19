@@ -133,7 +133,7 @@ export function CreateScheduleModal({ onClose }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-slate-300 font-semibold mb-1">Start Time</label>
               <input
@@ -149,17 +149,6 @@ export function CreateScheduleModal({ onClose }) {
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-mono focus:outline-none focus:border-cyber-cyan"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">Washroom Limit (Mins)</label>
-              <input
-                type="number"
-                min="1"
-                max="60"
-                value={washroomLimit}
-                onChange={(e) => setWashroomLimit(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-mono focus:outline-none focus:border-cyber-cyan"
               />
             </div>

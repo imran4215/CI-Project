@@ -5,7 +5,7 @@ import { useApp } from "../../context/AppContext";
 import { Bath, CheckCircle2, AlertOctagon } from "lucide-react";
 
 export function WashroomMonitor() {
-  const { attendanceData, washroomLimitMinutes, triggerAudio, triggerVoice, washroomOvertimeWarningGiven } = useApp();
+  const { attendanceData } = useApp();
   const [nowTime, setNowTime] = useState(Date.now());
 
   useEffect(() => {

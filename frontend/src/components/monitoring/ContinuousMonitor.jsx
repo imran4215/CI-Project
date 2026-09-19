@@ -29,6 +29,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { ClassroomMonitor } from "./ClassroomMonitor";
+import { SessionBanner } from "../layout/SessionBanner";
 
 export function ContinuousMonitor() {
   const {
@@ -73,7 +74,7 @@ export function ContinuousMonitor() {
   const [selectedHistoryCandidate, setSelectedHistoryCandidate] = useState(null);
 
   // Absence Timeout & Sensitivity Settings
-  const [absenceThresholdSec, setAbsenceThresholdSec] = useState(45);
+  const [absenceThresholdSec, setAbsenceThresholdSec] = useState(15);
   const [gateArrivalThresholdSec, setGateArrivalThresholdSec] = useState(300);
   const [voiceAlertsEnabled, setVoiceAlertsEnabled] = useState(true);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -324,33 +325,10 @@ export function ContinuousMonitor() {
       {surveillanceMode === "classroom" ? (
         <ClassroomMonitor />
       ) : (
-        <div className="flex flex-col gap-5">
-          {/* STANDBY NOTICE BANNER */}
-          {!isLiveExamActive && (
-            <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/20 backdrop-blur-md flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                  <Camera className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-bold text-emerald-300 flex items-center gap-2">
-                    Camera in Standby Mode (Normal Feed)
-                    <span className="px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono border border-emerald-500/40">
-                      ALERTS MUTED
-                    </span>
-                  </span>
-                  <p className="text-[11px] text-slate-300">
-                    {activeSchedule
-                      ? `Next Scheduled: "${activeSchedule.course_title}" (${activeSchedule.exam_date} ${activeSchedule.start_time}). Surveillance will automatically engage 30 minutes before exam time.`
-                      : "No active exam scheduled right now. Camera functions normally with recognition only; security alarms and proxy penalties are disabled."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-      {/* 1. TOP SURVEILLANCE KPI BANNER */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="flex flex-col gap-4">
+          <SessionBanner />
+          {/* 1. TOP SURVEILLANCE KPI BANNER */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Total Checked In */}
         <div className="glass-card p-3 flex flex-col gap-1 border-l-4 border-l-sky-500">
           <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
@@ -705,6 +683,30 @@ export function ContinuousMonitor() {
         </div>
       </div>
 
+      {/* STANDBY NOTICE BANNER (BOTTOM OF EXAM HALL VIEW) */}
+      {!isLiveExamActive && (
+        <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/20 backdrop-blur-md flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 flex-shrink-0">
+              <Camera className="w-4 h-4" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-emerald-300 flex items-center gap-2">
+                Camera in Standby Mode (Normal Feed)
+                <span className="px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono border border-emerald-500/40">
+                  ALERTS MUTED
+                </span>
+              </span>
+              <p className="text-[11px] text-slate-300">
+                {activeSchedule
+                  ? `Next Scheduled: "${activeSchedule.course_title}" (${activeSchedule.exam_date} ${activeSchedule.start_time}). Surveillance will automatically engage 30 minutes before exam time.`
+                  : "No active exam scheduled right now. Camera functions normally with recognition only; security alarms and proxy penalties are disabled."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3. CANDIDATE MOVEMENT & ABSENCE TIMELINE MODAL */}
       {selectedHistoryCandidate && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -945,7 +947,7 @@ export function ContinuousMonitor() {
                 <div className="flex items-center gap-3 pt-1">
                   <input
                     type="range"
-                    min="15"
+                    min="10"
                     max="180"
                     step="5"
                     value={absenceThresholdSec}

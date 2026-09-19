@@ -1,0 +1,268 @@
+{
+  "class_room-101_CSE-2101_2026-09-20": {
+    "room_id": "room-101",
+    "department": "Computer Science & Engineering",
+    "course_code": "CSE-2101",
+    "course_name": "Data Structures & Algorithms",
+    "day": "Sunday",
+    "time_slot": "09:00 AM - 09:50 AM",
+    "created_at": "2026-09-20T09:00:00",
+    "candidates": {
+      "faea207a": {
+        "candidate_id": "faea207a",
+        "name": "Imran",
+        "roll_id": "202314117",
+        "department": "Computer Science & Engineering",
+        "status": "PRESENT",
+        "first_detected_at": "2026-09-20T09:02:15",
+        "first_detected_time": "09:02:15 AM",
+        "last_seen_at": "2026-09-20T09:48:30",
+        "last_seen_time": "09:48:30 AM",
+        "in_class_seconds": 2775,
+        "stepped_out_at": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": [
+          {
+            "id": "ev-01",
+            "candidate_id": "faea207a",
+            "name": "Imran",
+            "event": "CLASS_ENTRY",
+            "time": "09:02:15 AM",
+            "timestamp": "2026-09-20T09:02:15",
+            "label": "Imran entered classroom (Attendance Auto-Marked)",
+            "type": "entry"
+          },
+          {
+            "id": "ev-02",
+            "candidate_id": "faea207a",
+            "name": "Imran",
+            "event": "STEPPED_OUT",
+            "time": "09:25:10 AM",
+            "timestamp": "2026-09-20T09:25:10",
+            "duration_sec": 65,
+            "label": "Imran stepped out / left classroom view (65s)",
+            "type": "out"
+          },
+          {
+            "id": "ev-03",
+            "candidate_id": "faea207a",
+            "name": "Imran",
+            "event": "RETURNED",
+            "time": "09:26:15 AM",
+            "timestamp": "2026-09-20T09:26:15",
+            "label": "Imran returned to class seat (Absent for 65s)",
+            "type": "return"
+          }
+        ]
+      },
+      "c73754c8": {
+        "candidate_id": "c73754c8",
+        "name": "Mohaimen Hridoy",
+        "roll_id": "202314099",
+        "department": "Computer Science & Engineering",
+        "status": "PRESENT",
+        "first_detected_at": "2026-09-20T09:04:10",
+        "first_detected_time": "09:04:10 AM",
+        "last_seen_at": "2026-09-20T09:47:00",
+        "last_seen_time": "09:47:00 AM",
+        "in_class_seconds": 2570,
+        "stepped_out_at": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": [
+          {
+            "id": "ev-04",
+            "candidate_id": "c73754c8",
+            "name": "Mohaimen Hridoy",
+            "event": "CLASS_ENTRY",
+            "time": "09:04:10 AM",
+            "timestamp": "2026-09-20T09:04:10",
+            "label": "Mohaimen Hridoy entered classroom (Attendance Auto-Marked)",
+            "type": "entry"
+          }
+        ]
+      },
+      "d171c7d7": {
+        "candidate_id": "d171c7d7",
+        "name": "Sinlam",
+        "roll_id": "202314105",
+        "department": "Computer Science & Engineering",
+        "status": "STEPPED_OUT",
+        "first_detected_at": "2026-09-20T09:05:00",
+        "first_detected_time": "09:05:00 AM",
+        "last_seen_at": "2026-09-20T09:35:00",
+        "last_seen_time": "09:35:00 AM",
+        "in_class_seconds": 1800,
+        "stepped_out_at": "2026-09-20T09:35:00",
+        "stepped_out_duration_sec": 120,
+        "movement_history": [
+          {
+            "id": "ev-05",
+            "candidate_id": "d171c7d7",
+            "name": "Sinlam",
+            "event": "CLASS_ENTRY",
+            "time": "09:05:00 AM",
+            "timestamp": "2026-09-20T09:05:00",
+            "label": "Sinlam entered classroom (Attendance Auto-Marked)",
+            "type": "entry"
+          },
+          {
+            "id": "ev-06",
+            "candidate_id": "d171c7d7",
+            "name": "Sinlam",
+            "event": "STEPPED_OUT",
+            "time": "09:35:00 AM",
+            "timestamp": "2026-09-20T09:35:00",
+            "duration_sec": 120,
+            "label": "Sinlam stepped out / left classroom view (120s)",
+            "type": "out"
+          }
+        ]
+      },
+      "58700b1f": {
+        "candidate_id": "58700b1f",
+        "name": "Taslimul Alam",
+        "roll_id": "202314107",
+        "department": "Computer Science & Engineering",
+        "status": "ABSENT",
+        "first_detected_at": null,
+        "first_detected_time": null,
+        "last_seen_at": null,
+        "last_seen_time": "-",
+        "in_class_seconds": 0,
+        "stepped_out_at": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": []
+      }
+    },
+    "event_logs": [
+      {
+        "id": "ev-06",
+        "candidate_id": "d171c7d7",
+        "name": "Sinlam",
+        "event": "STEPPED_OUT",
+        "time": "09:35:00 AM",
+        "timestamp": "2026-09-20T09:35:00",
+        "label": "Sinlam stepped out / left classroom view (120s)",
+        "type": "out"
+      },
+      {
+        "id": "ev-03",
+        "candidate_id": "faea207a",
+        "name": "Imran",
+        "event": "RETURNED",
+        "time": "09:26:15 AM",
+        "timestamp": "2026-09-20T09:26:15",
+        "label": "Imran returned to class seat (Absent for 65s)",
+        "type": "return"
+      },
+      {
+        "id": "ev-02",
+        "candidate_id": "faea207a",
+        "name": "Imran",
+        "event": "STEPPED_OUT",
+        "time": "09:25:10 AM",
+        "timestamp": "2026-09-20T09:25:10",
+        "label": "Imran stepped out / left classroom view (65s)",
+        "type": "out"
+      },
+      {
+        "id": "ev-05",
+        "candidate_id": "d171c7d7",
+        "name": "Sinlam",
+        "event": "CLASS_ENTRY",
+        "time": "09:05:00 AM",
+        "timestamp": "2026-09-20T09:05:00",
+        "label": "Sinlam entered classroom (Attendance Auto-Marked)",
+        "type": "entry"
+      },
+      {
+        "id": "ev-04",
+        "candidate_id": "c73754c8",
+        "name": "Mohaimen Hridoy",
+        "event": "CLASS_ENTRY",
+        "time": "09:04:10 AM",
+        "timestamp": "2026-09-20T09:04:10",
+        "label": "Mohaimen Hridoy entered classroom (Attendance Auto-Marked)",
+        "type": "entry"
+      },
+      {
+        "id": "ev-01",
+        "candidate_id": "faea207a",
+        "name": "Imran",
+        "event": "CLASS_ENTRY",
+        "time": "09:02:15 AM",
+        "timestamp": "2026-09-20T09:02:15",
+        "label": "Imran entered classroom (Attendance Auto-Marked)",
+        "type": "entry"
+      }
+    ]
+  },
+  "class_room-101_EEE-1101_2026-09-20": {
+    "room_id": "room-101",
+    "department": "Electrical & Electronic Engineering",
+    "course_code": "EEE-1101",
+    "course_name": "Basic Electrical Circuit Analysis",
+    "day": "Sunday",
+    "time_slot": "10:00 AM - 10:50 AM",
+    "created_at": "2026-09-20T10:00:00",
+    "candidates": {
+      "faea207a": {
+        "candidate_id": "faea207a",
+        "name": "Imran",
+        "roll_id": "202314117",
+        "department": "Computer Science & Engineering",
+        "status": "PRESENT",
+        "first_detected_at": "2026-09-20T10:01:40",
+        "first_detected_time": "10:01:40 AM",
+        "last_seen_at": "2026-09-20T10:49:00",
+        "last_seen_time": "10:49:00 AM",
+        "in_class_seconds": 2840,
+        "stepped_out_at": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": [
+          {
+            "id": "ev-10",
+            "candidate_id": "faea207a",
+            "name": "Imran",
+            "event": "CLASS_ENTRY",
+            "time": "10:01:40 AM",
+            "timestamp": "2026-09-20T10:01:40",
+            "label": "Imran entered classroom (Attendance Auto-Marked)",
+            "type": "entry"
+          }
+        ]
+      },
+      "c73754c8": {
+        "candidate_id": "c73754c8",
+        "name": "Mohaimen Hridoy",
+        "roll_id": "202314099",
+        "department": "Computer Science & Engineering",
+        "status": "PRESENT",
+        "first_detected_at": "2026-09-20T10:03:00",
+        "first_detected_time": "10:03:00 AM",
+        "last_seen_at": "2026-09-20T10:48:10",
+        "last_seen_time": "10:48:10 AM",
+        "in_class_seconds": 2710,
+        "stepped_out_at": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": []
+      },
+      "58700b1f": {
+        "candidate_id": "58700b1f",
+        "name": "Taslimul Alam",
+        "roll_id": "202314107",
+        "department": "Computer Science & Engineering",
+        "status": "PRESENT",
+        "first_detected_at": "2026-09-20T10:05:20",
+        "first_detected_time": "10:05:20 AM",
+        "last_seen_at": "2026-09-20T10:46:00",
+        "last_seen_time": "10:46:00 AM",
+        "in_class_seconds": 2440,
+        "stepped_out_at": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": []
+      }
+    },
+    "event_logs": []
+  }
+}

@@ -86,12 +86,6 @@ export function drawFaceDetections(
       badgeName = `⚠️ ${face.name} (ADMIT PENDING)`;
       badgeId = `ID: ${face.roll_id || "N/A"}`;
       badgeRoom = `Room: ${roomName} • Check Clearance`;
-    } else if (attStatus === "WASHROOM") {
-      primaryColor = "#f59e0b";
-      glowColor = "rgba(245, 158, 11, 0.6)";
-      badgeName = `🚻 ${face.name} (IN WASHROOM)`;
-      badgeId = `ID: ${face.roll_id || "N/A"}`;
-      badgeRoom = `Room: ${roomName}`;
     } else if (isWriting) {
       // Writing with head bowed down
       primaryColor = "#38bdf8"; // Sky Blue

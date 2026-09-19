@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useApp } from "../../context/AppContext";
-import { MapPin, Calendar, Clock, Bath, Zap, PlayCircle, Lock } from "lucide-react";
+import { MapPin, Calendar, Clock, PlayCircle, Lock } from "lucide-react";
 
 export function SessionBanner() {
   const {
@@ -14,16 +14,13 @@ export function SessionBanner() {
     examName,
     setExamName,
     activeSchedule,
-    washroomLimitMinutes,
-    autoPunch,
-    setAutoPunch,
     attendanceData,
     addToast,
   } = useApp();
 
   const currentRoom = rooms.find((r) => r.id === activeRoomId);
   const presentCount = (attendanceData.records || []).filter(
-    (r) => r.room_id === activeRoomId && (r.status === "INSIDE" || r.status === "WASHROOM")
+    (r) => r.room_id === activeRoomId && r.status === "INSIDE"
   ).length;
 
   const now = new Date();
@@ -117,44 +114,12 @@ export function SessionBanner() {
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900/60 border border-slate-700/60 text-xs">
-          <Bath className="w-3.5 h-3.5 text-cyber-amber" />
-          <span className="text-slate-400">Washroom:</span>
-          <span className="font-bold text-amber-400 font-mono">{washroomLimitMinutes}m Max</span>
-        </div>
-
         <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
           <span>Presence:</span>
           <span className="font-bold text-cyber-emerald">
             {presentCount} / {currentRoom?.capacity || 40}
           </span>
         </div>
-      </div>
-
-      {/* Right: Auto-Punch Mode Switch */}
-      <div className="flex items-center gap-2.5">
-        <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300">
-          <Zap className={`w-3.5 h-3.5 ${autoPunch ? "text-amber-400" : "text-slate-500"}`} />
-          <span>Auto-Punch Mode</span>
-          <div
-            onClick={() => {
-              setAutoPunch(!autoPunch);
-              addToast(
-                !autoPunch ? "⚡ Auto-Punch Mode Enabled" : "Auto-Punch Mode Disabled",
-                !autoPunch ? "success" : "info"
-              );
-            }}
-            className={`w-9 h-5 flex items-center rounded-full p-1 transition-colors duration-200 cursor-pointer ${
-              autoPunch ? "bg-amber-500" : "bg-slate-700"
-            }`}
-          >
-            <div
-              className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform duration-200 ${
-                autoPunch ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </div>
-        </label>
       </div>
     </div>
   );

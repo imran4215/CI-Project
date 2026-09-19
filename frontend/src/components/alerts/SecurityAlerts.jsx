@@ -54,12 +54,6 @@ export function SecurityAlerts() {
         a.notes?.toLowerCase().includes("delayed") ||
         a.notes?.toLowerCase().includes("absence")
     );
-  } else if (selectedFilter === "OVERTIME") {
-    filteredAlerts = filteredAlerts.filter(
-      (a) =>
-        a.notes?.toLowerCase().includes("overtime") ||
-        a.notes?.toLowerCase().includes("washroom")
-    );
   }
 
   if (search.trim()) {
@@ -216,16 +210,6 @@ export function SecurityAlerts() {
                     a.notes?.toLowerCase().includes("missing") ||
                     a.notes?.toLowerCase().includes("delayed") ||
                     a.notes?.toLowerCase().includes("absence")
-                ).length
-              })`,
-            },
-            {
-              id: "OVERTIME",
-              label: `Washroom Overtime (${
-                alerts.filter(
-                  (a) =>
-                    a.notes?.toLowerCase().includes("overtime") ||
-                    a.notes?.toLowerCase().includes("washroom")
                 ).length
               })`,
             },

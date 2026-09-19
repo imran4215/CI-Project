@@ -19,6 +19,7 @@ ALLOCATIONS_FILE = os.path.join(DATA_DIR, "allocations.json")
 ATTENDANCE_FILE = os.path.join(DATA_DIR, "attendance.json")
 ALERTS_FILE = os.path.join(DATA_DIR, "proxy_alerts.json")
 CLASS_ROUTINES_FILE = os.path.join(DATA_DIR, "class_routines.json")
+CLASSROOM_ATTENDANCE_FILE = os.path.join(DATA_DIR, "classroom_attendance.json")
 
 os.makedirs(FACES_DIR, exist_ok=True)
 os.makedirs(ATTENDANCE_DIR, exist_ok=True)
@@ -119,135 +120,357 @@ def get_default_schedules():
 
 def get_default_class_routines():
     return [
-        {
-            "id": "rt-101-sun-1",
+        # Room 101 - Sunday
+        {"id": "rt-101-sun-1", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "CSE-2101", "course_name": "Data Structures & Algorithms", "instructor": "Dr. Tariq Rahman", "section": "Section A", "semester": "3rd", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-sun-2", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "CSE-3101", "course_name": "Database Management Systems", "instructor": "Prof. Mahmudul Hasan", "section": "Section B", "semester": "5th", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-sun-3", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": False, "course_code": "CSE-4101", "course_name": "Artificial Intelligence & Neural Networks", "instructor": "Dr. A. K. Azad", "section": "Section A", "semester": "7th", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-sun-4", "room_id": "room-101", "department": "Software Engineering", "day": "Sunday", "time_slot": "12:00 PM - 12:50 PM", "start_time": "12:00", "end_time": "12:50", "is_gap": False, "course_code": "SWE-1101", "course_name": "Introduction to Software Engineering", "instructor": "Farhana Sultana", "section": "Section A", "semester": "1st", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-sun-5", "room_id": "room-101", "department": "ALL", "day": "Sunday", "time_slot": "01:00 PM - 01:50 PM", "start_time": "13:00", "end_time": "13:50", "is_gap": True, "course_code": "GAP", "course_name": "Lunch & Prayer Break", "instructor": "", "section": "", "semester": "", "remarks": "1 Hour Break"},
+        {"id": "rt-101-sun-6", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "02:00 PM - 02:50 PM", "start_time": "14:00", "end_time": "14:50", "is_gap": False, "course_code": "CSE-1101", "course_name": "Structured Programming Language", "instructor": "Tanvir Ahmed", "section": "Section C", "semester": "1st", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-sun-7", "room_id": "room-101", "department": "Electrical & Electronic Engineering", "day": "Sunday", "time_slot": "03:00 PM - 03:50 PM", "start_time": "15:00", "end_time": "15:50", "is_gap": False, "course_code": "EEE-1101", "course_name": "Basic Electrical Circuit Analysis", "instructor": "Engr. Rezaul Karim", "section": "Section A", "semester": "2nd", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-sun-8", "room_id": "room-101", "department": "ALL", "day": "Sunday", "time_slot": "04:00 PM - 04:50 PM", "start_time": "16:00", "end_time": "16:50", "is_gap": True, "course_code": "GAP", "course_name": "Free Period / Discussion", "instructor": "", "section": "", "semester": "", "remarks": "No Class"},
+
+        # Room 101 - Monday
+        {"id": "rt-101-mon-1", "room_id": "room-101", "department": "Software Engineering", "day": "Monday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "SWE-2101", "course_name": "Software Requirements & Architecture", "instructor": "S. M. Farhad", "section": "Section A", "semester": "3rd", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-mon-2", "room_id": "room-101", "department": "Software Engineering", "day": "Monday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "SWE-3101", "course_name": "Full-Stack Web & Cloud Development", "instructor": "Nadia Islam", "section": "Section B", "semester": "5th", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-mon-3", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Monday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": False, "course_code": "CSE-1101", "course_name": "Structured Programming Language", "instructor": "Tanvir Ahmed", "section": "Section A", "semester": "1st", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-mon-4", "room_id": "room-101", "department": "Business Administration", "day": "Monday", "time_slot": "12:00 PM - 12:50 PM", "start_time": "12:00", "end_time": "12:50", "is_gap": False, "course_code": "BBA-1101", "course_name": "Principles of Management", "instructor": "Dr. Sabrina Noor", "section": "Section A", "semester": "1st", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-mon-5", "room_id": "room-101", "department": "ALL", "day": "Monday", "time_slot": "01:00 PM - 01:50 PM", "start_time": "13:00", "end_time": "13:50", "is_gap": True, "course_code": "GAP", "course_name": "Lunch & Prayer Break", "instructor": "", "section": "", "semester": "", "remarks": "1 Hour Break"},
+        {"id": "rt-101-mon-6", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Monday", "time_slot": "02:00 PM - 02:50 PM", "start_time": "14:00", "end_time": "14:50", "is_gap": False, "course_code": "CSE-2101", "course_name": "Data Structures & Algorithms", "instructor": "Dr. Tariq Rahman", "section": "Section B", "semester": "3rd", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-mon-7", "room_id": "room-101", "department": "Electrical & Electronic Engineering", "day": "Monday", "time_slot": "03:00 PM - 03:50 PM", "start_time": "15:00", "end_time": "15:50", "is_gap": False, "course_code": "EEE-2101", "course_name": "Electronic Devices & Analog Circuits", "instructor": "Dr. Kazi Moinul", "section": "Section A", "semester": "3rd", "remarks": "Lecture Hall 101"},
+        {"id": "rt-101-mon-8", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Monday", "time_slot": "04:00 PM - 04:50 PM", "start_time": "16:00", "end_time": "16:50", "is_gap": False, "course_code": "CSE-4101", "course_name": "Artificial Intelligence & Neural Networks", "instructor": "Dr. A. K. Azad", "section": "Section B", "semester": "7th", "remarks": "Lecture Hall 101"},
+
+        # Room 202 - Sunday
+        {"id": "rt-202-sun-1", "room_id": "room-202", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "CSE-4101", "course_name": "Artificial Intelligence & Neural Networks Lab", "instructor": "Dr. A. K. Azad", "section": "Section A", "semester": "7th", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-sun-2", "room_id": "room-202", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "CSE-4101", "course_name": "Artificial Intelligence & Neural Networks Lab", "instructor": "Dr. A. K. Azad", "section": "Section A", "semester": "7th", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-sun-3", "room_id": "room-202", "department": "ALL", "day": "Sunday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": True, "course_code": "GAP", "course_name": "Lab Maintenance & System Calibration", "instructor": "", "section": "", "semester": "", "remarks": "System Check"},
+        {"id": "rt-202-sun-4", "room_id": "room-202", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "12:00 PM - 12:50 PM", "start_time": "12:00", "end_time": "12:50", "is_gap": False, "course_code": "CSE-3101", "course_name": "Database Management Systems Lab", "instructor": "Prof. Mahmudul Hasan", "section": "Section A", "semester": "5th", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-sun-5", "room_id": "room-202", "department": "ALL", "day": "Sunday", "time_slot": "01:00 PM - 01:50 PM", "start_time": "13:00", "end_time": "13:50", "is_gap": True, "course_code": "GAP", "course_name": "Lunch & Prayer Break", "instructor": "", "section": "", "semester": "", "remarks": "Break"},
+        {"id": "rt-202-sun-6", "room_id": "room-202", "department": "Software Engineering", "day": "Sunday", "time_slot": "02:00 PM - 02:50 PM", "start_time": "14:00", "end_time": "14:50", "is_gap": False, "course_code": "SWE-3101", "course_name": "Full-Stack Web & Cloud Development Lab", "instructor": "Nadia Islam", "section": "Section A", "semester": "5th", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-sun-7", "room_id": "room-202", "department": "Software Engineering", "day": "Sunday", "time_slot": "03:00 PM - 03:50 PM", "start_time": "15:00", "end_time": "15:50", "is_gap": False, "course_code": "SWE-3101", "course_name": "Full-Stack Web & Cloud Development Lab", "instructor": "Nadia Islam", "section": "Section A", "semester": "5th", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-sun-8", "room_id": "room-202", "department": "ALL", "day": "Sunday", "time_slot": "04:00 PM - 04:50 PM", "start_time": "16:00", "end_time": "16:50", "is_gap": True, "course_code": "GAP", "course_name": "Open Lab Session", "instructor": "", "section": "", "semester": "", "remarks": "Open Practice"},
+
+        # Room 202 - Monday
+        {"id": "rt-202-mon-1", "room_id": "room-202", "department": "Computer Science & Engineering", "day": "Monday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "CSE-2101", "course_name": "Data Structures & Algorithms Lab", "instructor": "Dr. Tariq Rahman", "section": "Section A", "semester": "3rd", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-mon-2", "room_id": "room-202", "department": "Computer Science & Engineering", "day": "Monday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "CSE-2101", "course_name": "Data Structures & Algorithms Lab", "instructor": "Dr. Tariq Rahman", "section": "Section A", "semester": "3rd", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-mon-3", "room_id": "room-202", "department": "Computer Science & Engineering", "day": "Monday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": False, "course_code": "CSE-1101", "course_name": "Structured Programming Lab", "instructor": "Tanvir Ahmed", "section": "Section B", "semester": "1st", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-mon-4", "room_id": "room-202", "department": "Computer Science & Engineering", "day": "Monday", "time_slot": "12:00 PM - 12:50 PM", "start_time": "12:00", "end_time": "12:50", "is_gap": False, "course_code": "CSE-1101", "course_name": "Structured Programming Lab", "instructor": "Tanvir Ahmed", "section": "Section B", "semester": "1st", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-mon-5", "room_id": "room-202", "department": "ALL", "day": "Monday", "time_slot": "01:00 PM - 01:50 PM", "start_time": "13:00", "end_time": "13:50", "is_gap": True, "course_code": "GAP", "course_name": "Lunch & Prayer Break", "instructor": "", "section": "", "semester": "", "remarks": "Break"},
+        {"id": "rt-202-mon-6", "room_id": "room-202", "department": "Software Engineering", "day": "Monday", "time_slot": "02:00 PM - 02:50 PM", "start_time": "14:00", "end_time": "14:50", "is_gap": False, "course_code": "SWE-2101", "course_name": "Software Requirements & Architecture Lab", "instructor": "S. M. Farhad", "section": "Section B", "semester": "3rd", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-mon-7", "room_id": "room-202", "department": "Software Engineering", "day": "Monday", "time_slot": "03:00 PM - 03:50 PM", "start_time": "15:00", "end_time": "15:50", "is_gap": False, "course_code": "SWE-2101", "course_name": "Software Requirements & Architecture Lab", "instructor": "S. M. Farhad", "section": "Section B", "semester": "3rd", "remarks": "CS & AI Lab"},
+        {"id": "rt-202-mon-8", "room_id": "room-202", "department": "ALL", "day": "Monday", "time_slot": "04:00 PM - 04:50 PM", "start_time": "16:00", "end_time": "16:50", "is_gap": True, "course_code": "GAP", "course_name": "Lab Wrap-up & Backup", "instructor": "", "section": "", "semester": "", "remarks": "Maintenance"},
+
+        # Room 304 - Sunday
+        {"id": "rt-304-sun-1", "room_id": "room-304", "department": "Electrical & Electronic Engineering", "day": "Sunday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "EEE-1101", "course_name": "Basic Electrical Circuit Analysis", "instructor": "Engr. Rezaul Karim", "section": "Section B", "semester": "2nd", "remarks": "EEE Complex"},
+        {"id": "rt-304-sun-2", "room_id": "room-304", "department": "Electrical & Electronic Engineering", "day": "Sunday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "EEE-1101", "course_name": "Electrical Circuit Simulation Lab", "instructor": "Engr. Rezaul Karim", "section": "Section B", "semester": "2nd", "remarks": "EEE Complex"},
+        {"id": "rt-304-sun-3", "room_id": "room-304", "department": "Electrical & Electronic Engineering", "day": "Sunday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": False, "course_code": "EEE-2101", "course_name": "Electronic Devices & Analog Circuits", "instructor": "Dr. Kazi Moinul", "section": "Section A", "semester": "3rd", "remarks": "EEE Complex"},
+        {"id": "rt-304-sun-4", "room_id": "room-304", "department": "ALL", "day": "Sunday", "time_slot": "12:00 PM - 12:50 PM", "start_time": "12:00", "end_time": "12:50", "is_gap": True, "course_code": "GAP", "course_name": "Circuit Board Setup Break", "instructor": "", "section": "", "semester": "", "remarks": "Technical Setup"},
+        {"id": "rt-304-sun-5", "room_id": "room-304", "department": "ALL", "day": "Sunday", "time_slot": "01:00 PM - 01:50 PM", "start_time": "13:00", "end_time": "13:50", "is_gap": True, "course_code": "GAP", "course_name": "Lunch & Prayer Break", "instructor": "", "section": "", "semester": "", "remarks": "Break"},
+        {"id": "rt-304-sun-6", "room_id": "room-304", "department": "Civil Engineering", "day": "Sunday", "time_slot": "02:00 PM - 02:50 PM", "start_time": "14:00", "end_time": "14:50", "is_gap": False, "course_code": "CE-1101", "course_name": "Engineering Mechanics & Graphics", "instructor": "Engr. Jahirul Islam", "section": "Section A", "semester": "1st", "remarks": "EEE Complex"},
+        {"id": "rt-304-sun-7", "room_id": "room-304", "department": "Civil Engineering", "day": "Sunday", "time_slot": "03:00 PM - 03:50 PM", "start_time": "15:00", "end_time": "15:50", "is_gap": False, "course_code": "CE-2101", "course_name": "Mechanics of Solids & Structural Analysis", "instructor": "Dr. Ashraful Haque", "section": "Section A", "semester": "3rd", "remarks": "EEE Complex"},
+        {"id": "rt-304-sun-8", "room_id": "room-304", "department": "ALL", "day": "Sunday", "time_slot": "04:00 PM - 04:50 PM", "start_time": "16:00", "end_time": "16:50", "is_gap": True, "course_code": "GAP", "course_name": "Free Period", "instructor": "", "section": "", "semester": "", "remarks": "No Class"},
+
+        # Room 304 - Monday
+        {"id": "rt-304-mon-1", "room_id": "room-304", "department": "Electrical & Electronic Engineering", "day": "Monday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "EEE-2101", "course_name": "Analog Circuits Hardware Lab", "instructor": "Dr. Kazi Moinul", "section": "Section B", "semester": "3rd", "remarks": "EEE Complex"},
+        {"id": "rt-304-mon-2", "room_id": "room-304", "department": "Electrical & Electronic Engineering", "day": "Monday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "EEE-2101", "course_name": "Analog Circuits Hardware Lab", "instructor": "Dr. Kazi Moinul", "section": "Section B", "semester": "3rd", "remarks": "EEE Complex"},
+        {"id": "rt-304-mon-3", "room_id": "room-304", "department": "Civil Engineering", "day": "Monday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": False, "course_code": "CE-1101", "course_name": "Engineering Mechanics & Graphics", "instructor": "Engr. Jahirul Islam", "section": "Section B", "semester": "1st", "remarks": "EEE Complex"},
+        {"id": "rt-304-mon-4", "room_id": "room-304", "department": "Civil Engineering", "day": "Monday", "time_slot": "12:00 PM - 12:50 PM", "start_time": "12:00", "end_time": "12:50", "is_gap": False, "course_code": "CE-2101", "course_name": "Structural Analysis Lab", "instructor": "Dr. Ashraful Haque", "section": "Section A", "semester": "3rd", "remarks": "EEE Complex"},
+        {"id": "rt-304-mon-5", "room_id": "room-304", "department": "ALL", "day": "Monday", "time_slot": "01:00 PM - 01:50 PM", "start_time": "13:00", "end_time": "13:50", "is_gap": True, "course_code": "GAP", "course_name": "Lunch & Prayer Break", "instructor": "", "section": "", "semester": "", "remarks": "Break"},
+        {"id": "rt-304-mon-6", "room_id": "room-304", "department": "Electrical & Electronic Engineering", "day": "Monday", "time_slot": "02:00 PM - 02:50 PM", "start_time": "14:00", "end_time": "14:50", "is_gap": False, "course_code": "EEE-1101", "course_name": "Basic Electrical Circuit Analysis", "instructor": "Engr. Rezaul Karim", "section": "Section C", "semester": "2nd", "remarks": "EEE Complex"},
+        {"id": "rt-304-mon-7", "room_id": "room-304", "department": "Business Administration", "day": "Monday", "time_slot": "03:00 PM - 03:50 PM", "start_time": "15:00", "end_time": "15:50", "is_gap": False, "course_code": "BBA-2101", "course_name": "Financial & Managerial Accounting", "instructor": "Prof. Golam Kibria", "section": "Section A", "semester": "3rd", "remarks": "EEE Complex"},
+        {"id": "rt-304-mon-8", "room_id": "room-304", "department": "ALL", "day": "Monday", "time_slot": "04:00 PM - 04:50 PM", "start_time": "16:00", "end_time": "16:50", "is_gap": True, "course_code": "GAP", "course_name": "Evening Recess", "instructor": "", "section": "", "semester": "", "remarks": "Break"},
+
+        # Room 405 - Sunday
+        {"id": "rt-405-sun-1", "room_id": "room-405", "department": "Business Administration", "day": "Sunday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "BBA-1101", "course_name": "Principles of Management", "instructor": "Dr. Sabrina Noor", "section": "Section B", "semester": "1st", "remarks": "Science Hall"},
+        {"id": "rt-405-sun-2", "room_id": "room-405", "department": "Business Administration", "day": "Sunday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "BBA-2101", "course_name": "Financial & Managerial Accounting", "instructor": "Prof. Golam Kibria", "section": "Section B", "semester": "3rd", "remarks": "Science Hall"},
+        {"id": "rt-405-sun-3", "room_id": "room-405", "department": "Civil Engineering", "day": "Sunday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": False, "course_code": "CE-1101", "course_name": "Engineering Mechanics & Graphics", "instructor": "Engr. Jahirul Islam", "section": "Section A", "semester": "1st", "remarks": "Science Hall"},
+        {"id": "rt-405-sun-4", "room_id": "room-405", "department": "Software Engineering", "day": "Sunday", "time_slot": "12:00 PM - 12:50 PM", "start_time": "12:00", "end_time": "12:50", "is_gap": False, "course_code": "SWE-1101", "course_name": "Introduction to Software Engineering", "instructor": "Farhana Sultana", "section": "Section B", "semester": "1st", "remarks": "Science Hall"},
+        {"id": "rt-405-sun-5", "room_id": "room-405", "department": "ALL", "day": "Sunday", "time_slot": "01:00 PM - 01:50 PM", "start_time": "13:00", "end_time": "13:50", "is_gap": True, "course_code": "GAP", "course_name": "Lunch & Prayer Break", "instructor": "", "section": "", "semester": "", "remarks": "Break"},
+        {"id": "rt-405-sun-6", "room_id": "room-405", "department": "Business Administration", "day": "Sunday", "time_slot": "02:00 PM - 02:50 PM", "start_time": "14:00", "end_time": "14:50", "is_gap": False, "course_code": "BBA-1101", "course_name": "Principles of Management", "instructor": "Dr. Sabrina Noor", "section": "Section C", "semester": "1st", "remarks": "Science Hall"},
+        {"id": "rt-405-sun-7", "room_id": "room-405", "department": "Civil Engineering", "day": "Sunday", "time_slot": "03:00 PM - 03:50 PM", "start_time": "15:00", "end_time": "15:50", "is_gap": False, "course_code": "CE-2101", "course_name": "Mechanics of Solids & Structural Analysis", "instructor": "Dr. Ashraful Haque", "section": "Section B", "semester": "3rd", "remarks": "Science Hall"},
+        {"id": "rt-405-sun-8", "room_id": "room-405", "department": "ALL", "day": "Sunday", "time_slot": "04:00 PM - 04:50 PM", "start_time": "16:00", "end_time": "16:50", "is_gap": True, "course_code": "GAP", "course_name": "Free Interval", "instructor": "", "section": "", "semester": "", "remarks": "No Class"},
+
+        # Room 405 - Monday
+        {"id": "rt-405-mon-1", "room_id": "room-405", "department": "Business Administration", "day": "Monday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "BBA-2101", "course_name": "Financial & Managerial Accounting", "instructor": "Prof. Golam Kibria", "section": "Section A", "semester": "3rd", "remarks": "Science Hall"},
+        {"id": "rt-405-mon-2", "room_id": "room-405", "department": "Software Engineering", "day": "Monday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "SWE-1101", "course_name": "Introduction to Software Engineering", "instructor": "Farhana Sultana", "section": "Section A", "semester": "1st", "remarks": "Science Hall"},
+        {"id": "rt-405-mon-3", "room_id": "room-405", "department": "Computer Science & Engineering", "day": "Monday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": False, "course_code": "CSE-3101", "course_name": "Database Management Systems", "instructor": "Prof. Mahmudul Hasan", "section": "Section C", "semester": "5th", "remarks": "Science Hall"},
+        {"id": "rt-405-mon-4", "room_id": "room-405", "department": "Electrical & Electronic Engineering", "day": "Monday", "time_slot": "12:00 PM - 12:50 PM", "start_time": "12:00", "end_time": "12:50", "is_gap": False, "course_code": "EEE-1101", "course_name": "Basic Electrical Circuit Analysis", "instructor": "Engr. Rezaul Karim", "section": "Section B", "semester": "2nd", "remarks": "Science Hall"},
+        {"id": "rt-405-mon-5", "room_id": "room-405", "department": "ALL", "day": "Monday", "time_slot": "01:00 PM - 01:50 PM", "start_time": "13:00", "end_time": "13:50", "is_gap": True, "course_code": "GAP", "course_name": "Lunch & Prayer Break", "instructor": "", "section": "", "semester": "", "remarks": "Break"},
+        {"id": "rt-405-mon-6", "room_id": "room-405", "department": "Civil Engineering", "day": "Monday", "time_slot": "02:00 PM - 02:50 PM", "start_time": "14:00", "end_time": "14:50", "is_gap": False, "course_code": "CE-1101", "course_name": "Engineering Mechanics & Graphics", "instructor": "Engr. Jahirul Islam", "section": "Section A", "semester": "1st", "remarks": "Science Hall"},
+        {"id": "rt-405-mon-7", "room_id": "room-405", "department": "Software Engineering", "day": "Monday", "time_slot": "03:00 PM - 03:50 PM", "start_time": "15:00", "end_time": "15:50", "is_gap": False, "course_code": "SWE-2101", "course_name": "Software Requirements & Architecture", "instructor": "S. M. Farhad", "section": "Section A", "semester": "3rd", "remarks": "Science Hall"},
+        {"id": "rt-405-mon-8", "room_id": "room-405", "department": "ALL", "day": "Monday", "time_slot": "04:00 PM - 04:50 PM", "start_time": "16:00", "end_time": "16:50", "is_gap": True, "course_code": "GAP", "course_name": "Department Discussion", "instructor": "", "section": "", "semester": "", "remarks": "Discussion"}
+    ]
+
+def get_default_classroom_sessions():
+    today_str = date.today().isoformat()
+    return {
+        f"class_room-101_CSE-2101_{today_str}": {
             "room_id": "room-101",
             "department": "Computer Science & Engineering",
-            "day": "Sunday",
-            "time_slot": "09:00 - 09:50",
-            "start_time": "09:00",
-            "end_time": "09:50",
-            "is_gap": False,
             "course_code": "CSE-2101",
             "course_name": "Data Structures & Algorithms",
-            "instructor": "Dr. Tariq Rahman",
-            "section": "A",
-            "semester": "3rd",
-            "remarks": "Lecture Hall 101"
-        },
-        {
-            "id": "rt-101-sun-2",
-            "room_id": "room-101",
-            "department": "Computer Science & Engineering",
             "day": "Sunday",
-            "time_slot": "10:00 - 10:50",
-            "start_time": "10:00",
-            "end_time": "10:50",
-            "is_gap": False,
-            "course_code": "CSE-3101",
-            "course_name": "Database Management Systems",
-            "instructor": "Prof. Mahmudul Hasan",
-            "section": "B",
-            "semester": "5th",
-            "remarks": "Lecture Hall 101"
+            "time_slot": "09:00 AM - 09:50 AM",
+            "created_at": f"{today_str}T09:00:00",
+            "candidates": {
+                "faea207a": {
+                    "candidate_id": "faea207a",
+                    "name": "Imran",
+                    "roll_id": "202314117",
+                    "department": "Computer Science & Engineering",
+                    "status": "PRESENT",
+                    "first_detected_at": f"{today_str}T09:02:15",
+                    "first_detected_time": "09:02:15 AM",
+                    "last_seen_at": f"{today_str}T09:48:30",
+                    "last_seen_time": "09:48:30 AM",
+                    "in_class_seconds": 2775,
+                    "stepped_out_at": None,
+                    "stepped_out_duration_sec": 0,
+                    "movement_history": [
+                        {
+                            "id": "ev-01",
+                            "candidate_id": "faea207a",
+                            "name": "Imran",
+                            "event": "CLASS_ENTRY",
+                            "time": "09:02:15 AM",
+                            "timestamp": f"{today_str}T09:02:15",
+                            "label": "Imran entered classroom (Attendance Auto-Marked)",
+                            "type": "entry"
+                        },
+                        {
+                            "id": "ev-02",
+                            "candidate_id": "faea207a",
+                            "name": "Imran",
+                            "event": "STEPPED_OUT",
+                            "time": "09:25:10 AM",
+                            "timestamp": f"{today_str}T09:25:10",
+                            "duration_sec": 65,
+                            "label": "Imran stepped out / left classroom view (65s)",
+                            "type": "out"
+                        },
+                        {
+                            "id": "ev-03",
+                            "candidate_id": "faea207a",
+                            "name": "Imran",
+                            "event": "RETURNED",
+                            "time": "09:26:15 AM",
+                            "timestamp": f"{today_str}T09:26:15",
+                            "label": "Imran returned to class seat (Absent for 65s)",
+                            "type": "return"
+                        }
+                    ]
+                },
+                "c73754c8": {
+                    "candidate_id": "c73754c8",
+                    "name": "Mohaimen Hridoy",
+                    "roll_id": "202314099",
+                    "department": "Computer Science & Engineering",
+                    "status": "PRESENT",
+                    "first_detected_at": f"{today_str}T09:04:10",
+                    "first_detected_time": "09:04:10 AM",
+                    "last_seen_at": f"{today_str}T09:47:00",
+                    "last_seen_time": "09:47:00 AM",
+                    "in_class_seconds": 2570,
+                    "stepped_out_at": None,
+                    "stepped_out_duration_sec": 0,
+                    "movement_history": [
+                        {
+                            "id": "ev-04",
+                            "candidate_id": "c73754c8",
+                            "name": "Mohaimen Hridoy",
+                            "event": "CLASS_ENTRY",
+                            "time": "09:04:10 AM",
+                            "timestamp": f"{today_str}T09:04:10",
+                            "label": "Mohaimen Hridoy entered classroom (Attendance Auto-Marked)",
+                            "type": "entry"
+                        }
+                    ]
+                },
+                "d171c7d7": {
+                    "candidate_id": "d171c7d7",
+                    "name": "Sinlam",
+                    "roll_id": "202314105",
+                    "department": "Computer Science & Engineering",
+                    "status": "STEPPED_OUT",
+                    "first_detected_at": f"{today_str}T09:05:00",
+                    "first_detected_time": "09:05:00 AM",
+                    "last_seen_at": f"{today_str}T09:35:00",
+                    "last_seen_time": "09:35:00 AM",
+                    "in_class_seconds": 1800,
+                    "stepped_out_at": f"{today_str}T09:35:00",
+                    "stepped_out_duration_sec": 120,
+                    "movement_history": [
+                        {
+                            "id": "ev-05",
+                            "candidate_id": "d171c7d7",
+                            "name": "Sinlam",
+                            "event": "CLASS_ENTRY",
+                            "time": "09:05:00 AM",
+                            "timestamp": f"{today_str}T09:05:00",
+                            "label": "Sinlam entered classroom (Attendance Auto-Marked)",
+                            "type": "entry"
+                        },
+                        {
+                            "id": "ev-06",
+                            "candidate_id": "d171c7d7",
+                            "name": "Sinlam",
+                            "event": "STEPPED_OUT",
+                            "time": "09:35:00 AM",
+                            "timestamp": f"{today_str}T09:35:00",
+                            "duration_sec": 120,
+                            "label": "Sinlam stepped out / left classroom view (120s)",
+                            "type": "out"
+                        }
+                    ]
+                },
+                "58700b1f": {
+                    "candidate_id": "58700b1f",
+                    "name": "Taslimul Alam",
+                    "roll_id": "202314107",
+                    "department": "Computer Science & Engineering",
+                    "status": "ABSENT",
+                    "first_detected_at": None,
+                    "first_detected_time": None,
+                    "last_seen_at": None,
+                    "last_seen_time": "-",
+                    "in_class_seconds": 0,
+                    "stepped_out_at": None,
+                    "stepped_out_duration_sec": 0,
+                    "movement_history": []
+                }
+            },
+            "event_logs": [
+                {
+                    "id": "ev-06",
+                    "candidate_id": "d171c7d7",
+                    "name": "Sinlam",
+                    "event": "STEPPED_OUT",
+                    "time": "09:35:00 AM",
+                    "timestamp": f"{today_str}T09:35:00",
+                    "label": "Sinlam stepped out / left classroom view (120s)",
+                    "type": "out"
+                },
+                {
+                    "id": "ev-03",
+                    "candidate_id": "faea207a",
+                    "name": "Imran",
+                    "event": "RETURNED",
+                    "time": "09:26:15 AM",
+                    "timestamp": f"{today_str}T09:26:15",
+                    "label": "Imran returned to class seat (Absent for 65s)",
+                    "type": "return"
+                },
+                {
+                    "id": "ev-02",
+                    "candidate_id": "faea207a",
+                    "name": "Imran",
+                    "event": "STEPPED_OUT",
+                    "time": "09:25:10 AM",
+                    "timestamp": f"{today_str}T09:25:10",
+                    "label": "Imran stepped out / left classroom view (65s)",
+                    "type": "out"
+                },
+                {
+                    "id": "ev-05",
+                    "candidate_id": "d171c7d7",
+                    "name": "Sinlam",
+                    "event": "CLASS_ENTRY",
+                    "time": "09:05:00 AM",
+                    "timestamp": f"{today_str}T09:05:00",
+                    "label": "Sinlam entered classroom (Attendance Auto-Marked)",
+                    "type": "entry"
+                },
+                {
+                    "id": "ev-04",
+                    "candidate_id": "c73754c8",
+                    "name": "Mohaimen Hridoy",
+                    "event": "CLASS_ENTRY",
+                    "time": "09:04:10 AM",
+                    "timestamp": f"{today_str}T09:04:10",
+                    "label": "Mohaimen Hridoy entered classroom (Attendance Auto-Marked)",
+                    "type": "entry"
+                },
+                {
+                    "id": "ev-01",
+                    "candidate_id": "faea207a",
+                    "name": "Imran",
+                    "event": "CLASS_ENTRY",
+                    "time": "09:02:15 AM",
+                    "timestamp": f"{today_str}T09:02:15",
+                    "label": "Imran entered classroom (Attendance Auto-Marked)",
+                    "type": "entry"
+                }
+            ]
         },
-        {
-            "id": "rt-101-sun-3",
-            "room_id": "room-101",
-            "department": "Computer Science & Engineering",
-            "day": "Sunday",
-            "time_slot": "11:00 - 11:50",
-            "start_time": "11:00",
-            "end_time": "11:50",
-            "is_gap": False,
-            "course_code": "CSE-4101",
-            "course_name": "Artificial Intelligence & Neural Networks",
-            "instructor": "Dr. A. K. Azad",
-            "section": "A",
-            "semester": "7th",
-            "remarks": "Lecture Hall 101"
-        },
-        {
-            "id": "rt-101-sun-4",
-            "room_id": "room-101",
-            "department": "Software Engineering",
-            "day": "Sunday",
-            "time_slot": "12:00 - 12:50",
-            "start_time": "12:00",
-            "end_time": "12:50",
-            "is_gap": False,
-            "course_code": "SWE-1101",
-            "course_name": "Introduction to Software Engineering",
-            "instructor": "Farhana Sultana",
-            "section": "A",
-            "semester": "1st",
-            "remarks": "Lecture Hall 101"
-        },
-        {
-            "id": "rt-101-sun-5",
-            "room_id": "room-101",
-            "department": "ALL",
-            "day": "Sunday",
-            "time_slot": "01:00 - 01:50",
-            "start_time": "01:00",
-            "end_time": "01:50",
-            "is_gap": True,
-            "course_code": "GAP",
-            "course_name": "Lunch & Prayer Break",
-            "instructor": "",
-            "section": "",
-            "semester": "",
-            "remarks": "Break / Free Period"
-        },
-        {
-            "id": "rt-101-sun-6",
-            "room_id": "room-101",
-            "department": "Computer Science & Engineering",
-            "day": "Sunday",
-            "time_slot": "02:00 - 02:50",
-            "start_time": "02:00",
-            "end_time": "02:50",
-            "is_gap": False,
-            "course_code": "CSE-1101",
-            "course_name": "Structured Programming Language",
-            "instructor": "Tanvir Ahmed",
-            "section": "C",
-            "semester": "1st",
-            "remarks": "Lecture Hall 101"
-        },
-        {
-            "id": "rt-101-sun-7",
+        f"class_room-101_EEE-1101_{today_str}": {
             "room_id": "room-101",
             "department": "Electrical & Electronic Engineering",
-            "day": "Sunday",
-            "time_slot": "03:00 - 03:50",
-            "start_time": "03:00",
-            "end_time": "03:50",
-            "is_gap": False,
             "course_code": "EEE-1101",
             "course_name": "Basic Electrical Circuit Analysis",
-            "instructor": "Engr. Rezaul Karim",
-            "section": "A",
-            "semester": "2nd",
-            "remarks": "Lecture Hall 101"
-        },
-        {
-            "id": "rt-101-sun-8",
-            "room_id": "room-101",
-            "department": "ALL",
             "day": "Sunday",
-            "time_slot": "04:00 - 04:50",
-            "start_time": "04:00",
-            "end_time": "04:50",
-            "is_gap": True,
-            "course_code": "GAP",
-            "course_name": "Free Period / Discussion",
-            "instructor": "",
-            "section": "",
-            "semester": "",
-            "remarks": "No Class"
+            "time_slot": "10:00 AM - 10:50 AM",
+            "created_at": f"{today_str}T10:00:00",
+            "candidates": {
+                "faea207a": {
+                    "candidate_id": "faea207a",
+                    "name": "Imran",
+                    "roll_id": "202314117",
+                    "department": "Computer Science & Engineering",
+                    "status": "PRESENT",
+                    "first_detected_at": f"{today_str}T10:01:40",
+                    "first_detected_time": "10:01:40 AM",
+                    "last_seen_at": f"{today_str}T10:49:00",
+                    "last_seen_time": "10:49:00 AM",
+                    "in_class_seconds": 2840,
+                    "stepped_out_at": None,
+                    "stepped_out_duration_sec": 0,
+                    "movement_history": [
+                        {
+                            "id": "ev-10",
+                            "candidate_id": "faea207a",
+                            "name": "Imran",
+                            "event": "CLASS_ENTRY",
+                            "time": "10:01:40 AM",
+                            "timestamp": f"{today_str}T10:01:40",
+                            "label": "Imran entered classroom (Attendance Auto-Marked)",
+                            "type": "entry"
+                        }
+                    ]
+                },
+                "c73754c8": {
+                    "candidate_id": "c73754c8",
+                    "name": "Mohaimen Hridoy",
+                    "roll_id": "202314099",
+                    "department": "Computer Science & Engineering",
+                    "status": "PRESENT",
+                    "first_detected_at": f"{today_str}T10:03:00",
+                    "first_detected_time": "10:03:00 AM",
+                    "last_seen_at": f"{today_str}T10:48:10",
+                    "last_seen_time": "10:48:10 AM",
+                    "in_class_seconds": 2710,
+                    "stepped_out_at": None,
+                    "stepped_out_duration_sec": 0,
+                    "movement_history": []
+                },
+                "58700b1f": {
+                    "candidate_id": "58700b1f",
+                    "name": "Taslimul Alam",
+                    "roll_id": "202314107",
+                    "department": "Computer Science & Engineering",
+                    "status": "PRESENT",
+                    "first_detected_at": f"{today_str}T10:05:20",
+                    "first_detected_time": "10:05:20 AM",
+                    "last_seen_at": f"{today_str}T10:46:00",
+                    "last_seen_time": "10:46:00 AM",
+                    "in_class_seconds": 2440,
+                    "stepped_out_at": None,
+                    "stepped_out_duration_sec": 0,
+                    "movement_history": []
+                }
+            },
+            "event_logs": []
         }
-    ]
+    }
 
 class FaceDatabase:
     _instance = None
@@ -269,10 +492,11 @@ class FaceDatabase:
         self.attendance_file = ATTENDANCE_FILE
         self.alerts_file = ALERTS_FILE
         self.class_routines_file = CLASS_ROUTINES_FILE
+        self.classroom_attendance_file = CLASSROOM_ATTENDANCE_FILE
         self.monitoring_sessions = {}
         self.classroom_sessions = {}
         self.monitoring_config = {
-            "absence_threshold_sec": 45,
+            "absence_threshold_sec": 15,
             "gate_arrival_threshold_sec": 300,
             "grace_period_sec": 12,
             "auto_alert_voice": False
@@ -385,6 +609,18 @@ class FaceDatabase:
             self.class_routines = get_default_class_routines()
             self._save_class_routines()
 
+        # 9. Load classroom attendance sessions
+        if os.path.exists(self.classroom_attendance_file):
+            try:
+                with open(self.classroom_attendance_file, "r", encoding="utf-8") as f:
+                    self.classroom_sessions = json.load(f)
+            except Exception:
+                self.classroom_sessions = get_default_classroom_sessions()
+                self._save_classroom_sessions()
+        else:
+            self.classroom_sessions = get_default_classroom_sessions()
+            self._save_classroom_sessions()
+
     def _save(self):
         with open(self.db_file, "w", encoding="utf-8") as f:
             json.dump(self.db, f, indent=2, ensure_ascii=False)
@@ -392,6 +628,13 @@ class FaceDatabase:
     def _save_class_routines(self):
         with open(self.class_routines_file, "w", encoding="utf-8") as f:
             json.dump(self.class_routines, f, indent=2, ensure_ascii=False)
+
+    def _save_classroom_sessions(self):
+        try:
+            with open(self.classroom_attendance_file, "w", encoding="utf-8") as f:
+                json.dump(self.classroom_sessions, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print("Error saving classroom sessions:", e)
 
     def _save_rooms(self):
         with open(self.rooms_file, "w", encoding="utf-8") as f:
@@ -2027,7 +2270,7 @@ class FaceDatabase:
         # Run auto-exit sweep for any candidates exceeding the 30-minute post-exam exit window
         self.sweep_auto_exits(day_key=day_key, now_dt=now)
 
-        absence_threshold = self.monitoring_config.get("absence_threshold_sec", 45)
+        absence_threshold = self.monitoring_config.get("absence_threshold_sec", 15)
         gate_arrival_threshold = self.monitoring_config.get("gate_arrival_threshold_sec", 300)
         grace_period = self.monitoring_config.get("grace_period_sec", 12)
 
@@ -2459,7 +2702,7 @@ class FaceDatabase:
         course_code: str,
         course_name: str,
         detected_faces: List[Dict[str, Any]],
-        absence_threshold_sec: int = 45,
+        absence_threshold_sec: int = 15,
         day: Optional[str] = None,
         time_slot: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -2633,6 +2876,9 @@ class FaceDatabase:
         # Keep event logs capped at 100
         sess["event_logs"] = sess["event_logs"][:100]
 
+        # Save session to persistent JSON storage
+        self._save_classroom_sessions()
+
         return {
             "success": True,
             "session_key": sess_key,
@@ -2694,7 +2940,360 @@ class FaceDatabase:
         sess_key = f"class_{room_id}_{course_code}_{day_key}"
         if sess_key in self.classroom_sessions:
             del self.classroom_sessions[sess_key]
+            self._save_classroom_sessions()
         return True
+
+    def get_classroom_attendance(
+        self,
+        date_str: Optional[str] = None,
+        room_id: Optional[str] = None,
+        course_code: Optional[str] = None,
+        min_duration_mins: int = 30
+    ) -> Dict[str, Any]:
+        """
+        Retrieves all classroom attendance sessions for a specific date and room.
+        Matches against scheduled class routines and active/past sessions.
+        Applies min_duration_mins threshold (default 30 mins) for attendance qualification.
+        """
+        if not date_str:
+            date_str = self._get_today_key()
+
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+            weekday = dt.strftime("%A")
+        except Exception:
+            weekday = "Sunday"
+
+        # 1. Fetch class routines for this day and room
+        routines = self.get_class_routines(room_id=room_id, day=weekday)
+        routines.sort(key=lambda x: x.get("start_time") or x.get("time_slot", ""))
+
+        classes_data = []
+        total_enrolled_sum = 0
+        present_sum = 0
+        stepped_out_sum = 0
+        absent_sum = 0
+        processed_session_keys = set()
+        min_sec = int(min_duration_mins * 60)
+
+        for rt in routines:
+            c_code = rt.get("course_code")
+            r_id = rt.get("room_id")
+            slot = rt.get("time_slot")
+
+            if rt.get("is_gap") or not c_code or c_code == "GAP":
+                classes_data.append({
+                    "is_gap": True,
+                    "time_slot": slot,
+                    "title": rt.get("course_name") or "Recess / Break",
+                    "room_id": r_id,
+                    "room_name": self.get_room(r_id)["name"] if self.get_room(r_id) else r_id,
+                    "remarks": rt.get("remarks", "Break")
+                })
+                continue
+
+            if course_code and c_code != course_code:
+                continue
+
+            sess_key = f"class_{r_id}_{c_code}_{date_str}"
+            processed_session_keys.add(sess_key)
+
+            if sess_key in self.classroom_sessions:
+                sess = self.classroom_sessions[sess_key]
+                roster = list(sess.get("candidates", {}).values())
+                event_logs = sess.get("event_logs", [])
+            else:
+                # Build default roster from enrolled students or all eligible students
+                roster = []
+                enrolled_ids = []
+                for d in self.departments:
+                    for c in d.get("courses", []):
+                        if c.get("code") == c_code:
+                            enrolled_ids = c.get("enrolled_student_ids", [])
+                            break
+
+                if not enrolled_ids:
+                    for u in self.get_users():
+                        if not rt.get("department") or self._is_dept_match(u.get("department", ""), [rt.get("department")]):
+                            enrolled_ids.append(u["id"])
+
+                for u_id in enrolled_ids:
+                    u = self.get_user(u_id)
+                    if u:
+                        first_img = list(u.get("images", {}).values())[0] if u.get("images") else None
+                        roster.append({
+                            "candidate_id": u["id"],
+                            "name": u["name"],
+                            "roll_id": u.get("roll_id", "N/A"),
+                            "department": u.get("department", rt.get("department", "")),
+                            "avatar": f"/api/{first_img}" if first_img else None,
+                            "status": "ABSENT",
+                            "entry_time": "-",
+                            "first_detected_at": None,
+                            "first_detected_time": None,
+                            "last_seen_time": "-",
+                            "in_class_seconds": 0,
+                            "in_class_formatted": "0m",
+                            "stepped_out_count": 0,
+                            "stepped_out_duration_sec": 0,
+                            "away_formatted": "0s",
+                            "movement_history": []
+                        })
+                event_logs = []
+
+            # Format in-class duration, qualification, & away duration
+            for item in roster:
+                sec = item.get("in_class_seconds", 0)
+                item["in_class_formatted"] = f"{int(sec // 60)}m {int(sec % 60)}s" if sec >= 60 else f"{sec}s"
+                away_sec = item.get("stepped_out_duration_sec", 0)
+                item["away_formatted"] = f"{int(away_sec // 60)}m {int(away_sec % 60)}s" if away_sec >= 60 else f"{away_sec}s"
+                
+                is_qualified = sec >= min_sec
+                item["is_qualified"] = is_qualified
+                item["min_duration_mins"] = min_duration_mins
+                if item.get("status") in ["PRESENT", "STEPPED_OUT"] and not is_qualified:
+                    item["qualified_status"] = f"ABSENT (<{min_duration_mins}m)"
+                else:
+                    item["qualified_status"] = item.get("status", "ABSENT")
+
+            # Presence counts considering 30-min minimum attendance rule
+            p_cnt = sum(1 for c in roster if c.get("status") in ["PRESENT", "STEPPED_OUT"] and c.get("in_class_seconds", 0) >= min_sec)
+            s_cnt = sum(1 for c in roster if c.get("status") == "STEPPED_OUT")
+            a_cnt = sum(1 for c in roster if c.get("status") == "ABSENT" or c.get("in_class_seconds", 0) < min_sec)
+            total_enrolled_sum += len(roster)
+            present_sum += p_cnt
+            stepped_out_sum += s_cnt
+            absent_sum += a_cnt
+
+            status_rank = {"PRESENT": 0, "STEPPED_OUT": 1, "ABSENT": 2}
+            roster.sort(key=lambda x: (status_rank.get(x.get("status", "ABSENT"), 3), x.get("name", "")))
+
+            room_obj = self.get_room(r_id)
+
+            classes_data.append({
+                "is_gap": False,
+                "session_key": sess_key,
+                "room_id": r_id,
+                "room_name": room_obj["name"] if room_obj else r_id,
+                "department": rt.get("department", "CSE"),
+                "course_code": c_code,
+                "course_name": rt.get("course_name", "Academic Class"),
+                "instructor": rt.get("instructor", "Faculty"),
+                "section": rt.get("section", "A"),
+                "semester": rt.get("semester", "Spring 2026"),
+                "time_slot": slot,
+                "start_time": rt.get("start_time", ""),
+                "end_time": rt.get("end_time", ""),
+                "min_duration_mins": min_duration_mins,
+                "total_enrolled": len(roster),
+                "present_count": p_cnt,
+                "stepped_out_count": s_cnt,
+                "absent_count": a_cnt,
+                "roster": roster,
+                "event_logs": event_logs
+            })
+
+        # Also add standalone recorded sessions for that date
+        for sess_key, sess in self.classroom_sessions.items():
+            if sess_key not in processed_session_keys and date_str in sess_key:
+                r_id = sess.get("room_id")
+                if room_id and r_id != room_id:
+                    continue
+                roster = list(sess.get("candidates", {}).values())
+                for item in roster:
+                    sec = item.get("in_class_seconds", 0)
+                    item["in_class_formatted"] = f"{int(sec // 60)}m {int(sec % 60)}s" if sec >= 60 else f"{sec}s"
+                    away_sec = item.get("stepped_out_duration_sec", 0)
+                    item["away_formatted"] = f"{int(away_sec // 60)}m {int(away_sec % 60)}s" if away_sec >= 60 else f"{away_sec}s"
+                    is_qualified = sec >= min_sec
+                    item["is_qualified"] = is_qualified
+                    item["min_duration_mins"] = min_duration_mins
+                    if item.get("status") in ["PRESENT", "STEPPED_OUT"] and not is_qualified:
+                        item["qualified_status"] = f"ABSENT (<{min_duration_mins}m)"
+                    else:
+                        item["qualified_status"] = item.get("status", "ABSENT")
+
+                p_cnt = sum(1 for c in roster if c.get("status") in ["PRESENT", "STEPPED_OUT"] and c.get("in_class_seconds", 0) >= min_sec)
+                s_cnt = sum(1 for c in roster if c.get("status") == "STEPPED_OUT")
+                a_cnt = sum(1 for c in roster if c.get("status") == "ABSENT" or c.get("in_class_seconds", 0) < min_sec)
+                total_enrolled_sum += len(roster)
+                present_sum += p_cnt
+                stepped_out_sum += s_cnt
+                absent_sum += a_cnt
+
+                room_obj = self.get_room(r_id)
+                classes_data.append({
+                    "is_gap": False,
+                    "session_key": sess_key,
+                    "room_id": r_id,
+                    "room_name": room_obj["name"] if room_obj else r_id,
+                    "department": sess.get("department", "CSE"),
+                    "course_code": sess.get("course_code", "Special Class"),
+                    "course_name": sess.get("course_name", "Class Session"),
+                    "instructor": "Faculty",
+                    "section": "A",
+                    "semester": "Spring 2026",
+                    "time_slot": sess.get("time_slot", "09:00 - 09:50"),
+                    "min_duration_mins": min_duration_mins,
+                    "total_enrolled": len(roster),
+                    "present_count": p_cnt,
+                    "stepped_out_count": s_cnt,
+                    "absent_count": a_cnt,
+                    "roster": roster,
+                    "event_logs": sess.get("event_logs", [])
+                })
+
+        return {
+            "date": date_str,
+            "day": weekday,
+            "room_id": room_id,
+            "min_duration_mins": min_duration_mins,
+            "total_classes": sum(1 for c in classes_data if not c.get("is_gap")),
+            "total_enrolled": total_enrolled_sum,
+            "present_count": present_sum,
+            "stepped_out_count": stepped_out_sum,
+            "absent_count": absent_sum,
+            "classes": classes_data
+        }
+
+    def get_student_history(self, candidate_id: str) -> Dict[str, Any]:
+        """
+        Retrieves a comprehensive multi-day attendance and AI movement history profile
+        for a student across both Classroom sessions and Exam Hall sessions.
+        """
+        user = self.get_user(candidate_id)
+        if not user:
+            raise ValueError("Student / Candidate profile not found")
+
+        first_img = list(user.get("images", {}).values())[0] if user.get("images") else None
+        alloc = self.get_candidate_allocation(candidate_id)
+
+        # 1. Gather Exam Hall Attendance & Surveillance Records
+        exam_history = []
+        for date_key, day_sheet in sorted(self.attendance.items(), reverse=True):
+            if candidate_id in day_sheet:
+                rec = day_sheet[candidate_id]
+                exam_history.append({
+                    "date": date_key,
+                    "session_type": "EXAM_HALL",
+                    "title": rec.get("exam_name") or "Semester Examination",
+                    "room_id": rec.get("room_id", ""),
+                    "room_name": rec.get("room_name") or rec.get("hall_name") or "Main Exam Hall",
+                    "seat_number": rec.get("seat_number", "Seat A-01"),
+                    "status": rec.get("status", "ABSENT"),
+                    "entry_time": rec.get("entry_time") or "-",
+                    "exit_time": rec.get("exit_time") or "-",
+                    "duration_minutes": rec.get("duration_minutes"),
+                    "washroom_count": rec.get("washroom_count", 0),
+                    "total_washroom_minutes": rec.get("total_washroom_minutes", 0),
+                    "movement_history": rec.get("movement_history", []),
+                    "washroom_logs": rec.get("washroom_logs", []),
+                    "entry_snapshot": rec.get("entry_snapshot"),
+                    "exit_snapshot": rec.get("exit_snapshot"),
+                    "signature_snapshot": rec.get("signature_snapshot")
+                })
+
+        # 2. Gather Classroom Surveillance Records across all sessions
+        classroom_history = []
+        for sess_key, sess in sorted(self.classroom_sessions.items(), reverse=True):
+            parts = sess_key.split("_")
+            date_key = parts[-1] if len(parts) >= 4 else sess.get("created_at", "")[:10]
+            candidates = sess.get("candidates", {})
+
+            if candidate_id in candidates:
+                c_data = candidates[candidate_id]
+                in_class_sec = c_data.get("in_class_seconds", 0)
+                in_class_mins = round(in_class_sec / 60.0, 1) if in_class_sec else 0
+
+                if in_class_sec >= 60:
+                    in_class_formatted = f"{int(in_class_sec // 60)}m {int(in_class_sec % 60)}s"
+                else:
+                    in_class_formatted = f"{in_class_sec}s"
+
+                movements = c_data.get("movement_history", [])
+                stepped_out_count = sum(1 for m in movements if m.get("event") == "STEPPED_OUT" or m.get("type") == "out")
+
+                total_away_sec = sum(
+                    int(m.get("duration_sec", 0))
+                    for m in movements
+                    if "duration_sec" in m
+                )
+                if total_away_sec == 0 and c_data.get("stepped_out_duration_sec"):
+                    total_away_sec = c_data.get("stepped_out_duration_sec", 0)
+
+                away_formatted = f"{int(total_away_sec // 60)}m {int(total_away_sec % 60)}s" if total_away_sec >= 60 else f"{total_away_sec}s"
+
+                classroom_history.append({
+                    "session_key": sess_key,
+                    "date": date_key,
+                    "day": sess.get("day", ""),
+                    "session_type": "CLASSROOM",
+                    "room_id": sess.get("room_id", ""),
+                    "room_name": self.get_room(sess.get("room_id", ""))["name"] if self.get_room(sess.get("room_id", "")) else sess.get("room_id", ""),
+                    "course_code": sess.get("course_code", ""),
+                    "course_name": sess.get("course_name", ""),
+                    "time_slot": sess.get("time_slot", ""),
+                    "department": sess.get("department", ""),
+                    "status": c_data.get("status", "ABSENT"),
+                    "first_detected_time": c_data.get("first_detected_time") or c_data.get("entry_time") or "-",
+                    "last_seen_time": c_data.get("last_seen_time") or "-",
+                    "in_class_seconds": in_class_sec,
+                    "in_class_minutes": in_class_mins,
+                    "in_class_formatted": in_class_formatted,
+                    "stepped_out_count": stepped_out_count,
+                    "total_away_seconds": total_away_sec,
+                    "away_formatted": away_formatted,
+                    "movement_history": movements
+                })
+
+        # 3. Overall Statistics Calculation
+        total_class_sessions = len(classroom_history)
+        classes_present = sum(1 for c in classroom_history if c["status"] in ["PRESENT", "STEPPED_OUT"])
+        classes_absent = sum(1 for c in classroom_history if c["status"] == "ABSENT")
+        class_attendance_rate = round((classes_present / total_class_sessions * 100), 1) if total_class_sessions > 0 else 100.0
+
+        total_exams = len(exam_history)
+        exams_attended = sum(1 for e in exam_history if e["status"] in ["INSIDE", "EXITED"])
+        exam_attendance_rate = round((exams_attended / total_exams * 100), 1) if total_exams > 0 else 100.0
+
+        total_in_class_sec = sum(c["in_class_seconds"] for c in classroom_history)
+        total_class_hours = round(total_in_class_sec / 3600.0, 1)
+
+        total_stepped_out = sum(c["stepped_out_count"] for c in classroom_history) + sum(len(e["movement_history"]) for e in exam_history)
+        total_away_sec = sum(c["total_away_seconds"] for c in classroom_history) + sum(
+            sum(int(m.get("duration_sec", 0)) for m in e.get("movement_history", []))
+            for e in exam_history
+        )
+        total_away_formatted = f"{int(total_away_sec // 60)}m {int(total_away_sec % 60)}s" if total_away_sec >= 60 else f"{total_away_sec}s"
+
+        return {
+            "success": True,
+            "student": {
+                "id": user["id"],
+                "name": user["name"],
+                "roll_id": user.get("roll_id", "N/A"),
+                "department": user.get("department", "General"),
+                "photo": f"/api/{first_img}" if first_img else None,
+                "allocated_room": alloc.get("room_name") if alloc else "Unassigned",
+                "allocated_seat": alloc.get("seat_number") if alloc else "N/A"
+            },
+            "statistics": {
+                "total_classroom_sessions": total_class_sessions,
+                "classes_present": classes_present,
+                "classes_absent": classes_absent,
+                "classroom_attendance_rate": class_attendance_rate,
+                "total_class_hours": total_class_hours,
+                "total_class_minutes": round(total_in_class_sec / 60.0, 1),
+                "total_exams": total_exams,
+                "exams_attended": exams_attended,
+                "exam_attendance_rate": exam_attendance_rate,
+                "total_departures_count": total_stepped_out,
+                "total_away_seconds": total_away_sec,
+                "total_away_formatted": total_away_formatted
+            },
+            "classroom_history": classroom_history,
+            "exam_history": exam_history
+        }
 
 db = FaceDatabase()
 

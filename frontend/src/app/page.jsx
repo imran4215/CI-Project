@@ -8,7 +8,6 @@ import { SessionBanner } from "../components/layout/SessionBanner";
 import { AttendanceScanner } from "../components/attendance/AttendanceScanner";
 import { CandidateCard } from "../components/attendance/CandidateCard";
 import { RecentPunches } from "../components/attendance/RecentPunches";
-import { WashroomMonitor } from "../components/attendance/WashroomMonitor";
 import { ContinuousMonitor } from "../components/monitoring/ContinuousMonitor";
 import { RegistrationHub } from "../components/registration_hub/RegistrationHub";
 import { SchedulesManager } from "../components/schedules/SchedulesManager";
@@ -180,10 +179,7 @@ export default function Home() {
                   setDetectedCandidate(null);
                 }}
               />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <RecentPunches punches={recentPunches} />
-                <WashroomMonitor />
-              </div>
+              <RecentPunches punches={recentPunches} />
             </div>
 
             <div className="lg:col-span-5">
@@ -205,7 +201,6 @@ export default function Home() {
       {/* TAB 2: CONTINUOUS EXAM HALL SURVEILLANCE & WRITING DETECTOR */}
       {activeTab === "monitoring" && (
         <div className="flex flex-col">
-          <SessionBanner />
           <ContinuousMonitor />
         </div>
       )}

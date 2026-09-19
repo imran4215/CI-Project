@@ -54,7 +54,16 @@ export function ClassRoutineManager() {
     if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem("digihall_routine_time_slots");
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length >= 6) {
+            // Validate that slots do not contain corrupted test midnight times
+            const hasCorrupt = parsed.some(
+              (s) => s.label?.includes("12:10 AM") || !s.start || !s.end
+            );
+            if (!hasCorrupt) return parsed;
+          }
+        }
       } catch (e) {}
     }
     return STANDARD_TIME_SLOTS;
@@ -67,6 +76,17 @@ export function ClassRoutineManager() {
       } catch (e) {}
     }
   }, [timeSlots]);
+
+  // Reset timetable columns to standard 8 daily periods
+  const handleResetStandardSlots = () => {
+    setTimeSlots(STANDARD_TIME_SLOTS);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("digihall_routine_time_slots", JSON.stringify(STANDARD_TIME_SLOTS));
+      } catch (e) {}
+    }
+    addToast("🔄 Reset timetable columns to standard 8 daily slots (09:00 AM - 04:50 PM)", "success");
+  };
 
   // Modal / Drawer Form State for Creating or Editing a Slot
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -452,14 +472,20 @@ export function ClassRoutineManager() {
 
   // Find slot for matrix cell
   const getSlotForCell = (day, timeSlotLabel) => {
-    if (!routines || !selectedRoomId) return null;
-    const norm = (s) => (s || "").replace(/\s*(AM|PM)\s*/gi, "").trim();
-    return routines.find(
-      (r) =>
-        r.room_id === selectedRoomId &&
-        r.day?.toLowerCase() === day.toLowerCase() &&
-        (r.time_slot === timeSlotLabel || norm(r.time_slot) === norm(timeSlotLabel))
-    );
+    if (!routines || routines.length === 0 || !selectedRoomId) return null;
+    const clean = (s) => (s || "").replace(/\s*(AM|PM)\s*/gi, "").replace(/\s+/g, "").trim();
+    const cellSlot = timeSlots.find((s) => s.label === timeSlotLabel || s.displayLabel === timeSlotLabel);
+
+    return routines.find((r) => {
+      if (r.room_id !== selectedRoomId) return false;
+      if ((r.day || "").toLowerCase() !== day.toLowerCase()) return false;
+      if (r.time_slot === timeSlotLabel) return true;
+      if (clean(r.time_slot) === clean(timeSlotLabel)) return true;
+      if (cellSlot && r.start_time && r.end_time) {
+        if (r.start_time === cellSlot.start && r.end_time === cellSlot.end) return true;
+      }
+      return false;
+    });
   };
 
   return (
@@ -498,6 +524,14 @@ export function ClassRoutineManager() {
               className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs font-mono flex items-center gap-2 transition shadow-neon-cyan"
             >
               <Plus className="w-4 h-4" /> Add Routine Slot
+            </button>
+
+            <button
+              onClick={handleResetStandardSlots}
+              className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold font-mono flex items-center gap-1.5 transition"
+              title="Reset column headers to standard 8 daily periods"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-cyan-400" /> Reset 8 Slots
             </button>
 
             <button
@@ -641,16 +675,24 @@ export function ClassRoutineManager() {
                       <span className="text-white text-[11px] font-black">Day / Time</span>
                       <span className="text-[9px] text-cyan-400 font-mono">({timeSlots.length})</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddTimeModalOpen(true);
-                      }}
-                      className="px-1.5 py-1 rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-[10px] font-mono tracking-wide flex items-center justify-center gap-1 shadow-neon-cyan transition hover:scale-[1.02]"
-                      title="Add new time slot column"
-                    >
-                      <Plus className="w-3 h-3 stroke-[3]" /> Add Time
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddTimeModalOpen(true)}
+                        className="flex-1 px-1.5 py-1 rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-[10px] font-mono tracking-wide flex items-center justify-center gap-0.5 shadow-neon-cyan transition hover:scale-[1.02]"
+                        title="Add new time slot column"
+                      >
+                        <Plus className="w-3 h-3 stroke-[3]" /> Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetStandardSlots}
+                        className="p-1 rounded-md bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition"
+                        title="Reset columns to standard 8 daily slots"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </th>
                 {timeSlots.map((slot) => (

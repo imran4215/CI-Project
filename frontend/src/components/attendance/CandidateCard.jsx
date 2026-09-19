@@ -17,8 +17,6 @@ import {
   CheckCircle2,
   LogIn,
   LogOut,
-  Bath,
-  DoorOpen,
   ShieldAlert,
   ArrowRightLeft,
   UserPlus,
@@ -44,7 +42,6 @@ export function CandidateCard({
     activeRoomName,
     examName,
     activeSchedule,
-    washroomLimitMinutes,
     users,
     addToast,
     triggerAudio,
@@ -52,7 +49,6 @@ export function CandidateCard({
     loadAllocations,
     loadAttendance,
     loadAlerts,
-    loadWashroomActive,
     setActiveTab,
   } = useApp();
 
@@ -307,7 +303,7 @@ export function CandidateCard({
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [isFaceStepPassed, isSignatureStepPassed, isRfidStepPassed, signatureData.isOverridden, handleRfidScanned]);
 
-  // Execute Attendance Action (ENTRY, WASHROOM_OUT, WASHROOM_IN, EXIT)
+  // Execute Attendance Action (ENTRY, EXIT)
   const handleAction = async (actionType, overrideAdmit = false, overrideSchedule = false) => {
     const cand = activeCandidate || detectedCandidate;
     if (!cand || loadingAction) return;
@@ -345,22 +341,6 @@ export function CandidateCard({
         triggerAudio("success");
         triggerVoice(`Entry and signature confirmed for ${cand.name}. Welcome to the exam hall.`);
         addToast(`🎉 3-Factor Entry Confirmed: ${cand.name} (${res.record?.entry_time})`, "success");
-      } else if (actionType === "WASHROOM_OUT") {
-        triggerAudio("warning");
-        const limit = activeSchedule?.washroom_limit_minutes || washroomLimitMinutes || 10;
-        triggerVoice(`Washroom break recorded for ${cand.name}. Time limit is ${limit} minutes.`);
-        addToast(`🚻 Washroom Break (Out): ${cand.name} (${res.record?.washroom_out_time})`, "warning");
-      } else if (actionType === "WASHROOM_IN") {
-        const lastBreak = res.record?.last_break;
-        if (lastBreak?.is_overtime) {
-          triggerAudio("alert");
-          triggerVoice(`Warning! Washroom time limit exceeded. Candidate ${cand.name} returned ${lastBreak.overtime_minutes} minutes late.`);
-          addToast(`⚠️ OVERTIME VIOLATION: ${cand.name} spent ${lastBreak.duration_minutes}m (Limit: ${lastBreak.limit_minutes}m)!`, "error");
-        } else {
-          triggerAudio("success");
-          triggerVoice(`Welcome back to the exam hall, ${cand.name}.`);
-          addToast(`🟢 Washroom Return (In): ${cand.name} (${lastBreak?.duration_minutes || 0}m spent)`, "success");
-        }
       } else if (actionType === "EXIT") {
         triggerAudio("warning");
         triggerVoice(`Exit confirmed for ${cand.name}. Exam submitted.`);
@@ -369,7 +349,6 @@ export function CandidateCard({
 
       await loadAttendance();
       await loadAlerts();
-      await loadWashroomActive();
       if (onPunchCompleted) onPunchCompleted(cand.name, actionType);
 
       // Reset verification steps for next student
@@ -705,9 +684,6 @@ export function CandidateCard({
   }
 
   // 7. Active Candidate Profile (Cleared & Valid)
-  const isOvertimeBreak = attendanceRecord?.last_break?.is_overtime;
-  const washroomBreaksCount = attendanceRecord?.washroom_count || 0;
-
   return (
     <div className="glass-panel p-5 flex flex-col gap-4 min-h-[460px] border-sky-500/20">
       {/* Header Status */}
@@ -720,8 +696,6 @@ export function CandidateCard({
           className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold border ${
             attStatus === "INSIDE"
               ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-              : attStatus === "WASHROOM"
-              ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
               : attStatus === "EXITED"
               ? "bg-purple-500/20 text-purple-400 border-purple-500/40"
               : "bg-slate-800 text-slate-300 border-slate-700"
@@ -729,28 +703,11 @@ export function CandidateCard({
         >
           {attStatus === "INSIDE"
             ? "INSIDE HALL"
-            : attStatus === "WASHROOM"
-            ? "IN WASHROOM"
             : attStatus === "EXITED"
             ? "EXAM COMPLETED"
             : "NOT CHECKED IN"}
         </span>
       </div>
-
-      {/* Washroom Overtime Alert Box if returning overtime */}
-      {isOvertimeBreak && (
-        <div className="p-3 rounded-lg bg-rose-500/15 border-2 border-rose-500 animate-violation flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
-            <AlertOctagon className="w-4 h-4 animate-pulse" />
-            <span>⚠️ WASHROOM TIME LIMIT EXCEEDED!</span>
-          </div>
-          <div className="flex justify-between text-[11px] font-mono bg-slate-950/60 p-2 rounded">
-            <span>Spent: <strong className="text-rose-400">{attendanceRecord.last_break.duration_minutes}m</strong></span>
-            <span>Limit: <strong>{attendanceRecord.last_break.limit_minutes}m</strong></span>
-            <span>Overtime: <strong className="text-rose-400">+{attendanceRecord.last_break.overtime_minutes}m</strong></span>
-          </div>
-        </div>
-      )}
 
       {/* Side by Side Photos Comparison */}
       <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
@@ -800,19 +757,14 @@ export function CandidateCard({
         <span className="text-xs text-slate-400">Department: {department || "Computer Science & Eng."}</span>
 
         {/* Timeline Row */}
-        <div className="grid grid-cols-3 gap-2 mt-2 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] font-mono">
+        <div className="grid grid-cols-2 gap-2 mt-2 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] font-mono">
           <div className={`flex flex-col ${attendanceRecord?.entry_time ? "text-emerald-400 font-bold" : "text-slate-500"}`}>
-            <span className="text-[10px] text-slate-400 flex items-center gap-1"><LogIn className="w-3 h-3" /> Entry</span>
+            <span className="text-[10px] text-slate-400 flex items-center gap-1"><LogIn className="w-3 h-3" /> Gate Entry</span>
             <span>{attendanceRecord?.entry_time || "Pending"}</span>
           </div>
 
-          <div className={`flex flex-col ${washroomBreaksCount > 0 || attStatus === "WASHROOM" ? "text-amber-400 font-bold" : "text-slate-500"}`}>
-            <span className="text-[10px] text-slate-400 flex items-center gap-1"><Bath className="w-3 h-3" /> Washroom</span>
-            <span>{attStatus === "WASHROOM" ? `Out ${attendanceRecord?.washroom_out_time || "Now"}` : `${washroomBreaksCount} Breaks`}</span>
-          </div>
-
           <div className={`flex flex-col ${attendanceRecord?.exit_time ? "text-purple-400 font-bold" : "text-slate-500"}`}>
-            <span className="text-[10px] text-slate-400 flex items-center gap-1"><LogOut className="w-3 h-3" /> Exit</span>
+            <span className="text-[10px] text-slate-400 flex items-center gap-1"><LogOut className="w-3 h-3" /> Gate Exit</span>
             <span>{attendanceRecord?.exit_time || "Pending"}</span>
           </div>
         </div>
@@ -1114,31 +1066,12 @@ export function CandidateCard({
         )}
 
         {attStatus === "INSIDE" && (
-          <div className="flex gap-2">
-            <button
-              disabled={loadingAction}
-              onClick={() => handleAction("WASHROOM_OUT")}
-              className="flex-1 py-3 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
-            >
-              <Bath className="w-4 h-4" /> WASHROOM BREAK (OUT)
-            </button>
-            <button
-              disabled={loadingAction}
-              onClick={() => handleAction("EXIT")}
-              className="flex-1 py-3 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-neon-amber cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" /> SUBMIT EXAM & EXIT
-            </button>
-          </div>
-        )}
-
-        {attStatus === "WASHROOM" && (
           <button
             disabled={loadingAction}
-            onClick={() => handleAction("WASHROOM_IN")}
-            className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm flex items-center justify-center gap-2 transition shadow-neon-emerald cursor-pointer"
+            onClick={() => handleAction("EXIT")}
+            className="w-full py-3.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition shadow-neon-amber cursor-pointer"
           >
-            <DoorOpen className="w-5 h-5" /> RETURN FROM WASHROOM (IN)
+            <LogOut className="w-4 h-4" /> SUBMIT EXAM & EXIT
           </button>
         )}
 

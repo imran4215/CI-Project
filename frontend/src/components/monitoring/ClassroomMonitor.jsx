@@ -76,7 +76,6 @@ export function ClassroomMonitor() {
   const [rooms, setRooms] = useState([]);
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [routines, setRoutines] = useState([]);
-  const [manualSelectedRoutineId, setManualSelectedRoutineId] = useState(""); // User manual override if chosen
 
   // Classroom Session Data from Backend
   const [classroomData, setClassroomData] = useState({
@@ -93,7 +92,8 @@ export function ClassroomMonitor() {
   const [selectedHistoryCandidate, setSelectedHistoryCandidate] = useState(null);
 
   // Absence Timeout & Sensitivity Settings
-  const [absenceThresholdSec, setAbsenceThresholdSec] = useState(45);
+  const [absenceThresholdSec, setAbsenceThresholdSec] = useState(15);
+  const [minAttendanceMins, setMinAttendanceMins] = useState(30);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [filterSearch, setFilterSearch] = useState("");
   const [rosterFilter, setRosterFilter] = useState("ALL"); // ALL, PRESENT, STEPPED_OUT, ABSENT
@@ -127,7 +127,7 @@ export function ClassroomMonitor() {
     loadRoutinesForRoom();
   }, [loadRoutinesForRoom]);
 
-  // Helper to parse time string (e.g. "09:00", "01:00 PM", "14:30") to total minutes from midnight
+  // Helper to parse time string (e.g. "09:00", "01:00 PM", "14:30", "03:00") to total minutes from midnight
   const parseTimeToMinutes = (timeStr) => {
     if (!timeStr) return null;
     const str = timeStr.trim().toUpperCase();
@@ -139,8 +139,19 @@ export function ClassroomMonitor() {
     let hours = parseInt(parts[0], 10);
     const mins = parseInt(parts[1], 10);
     if (isNaN(hours) || isNaN(mins)) return null;
-    if (isPm && hours < 12) hours += 12;
-    if (isAm && hours === 12) hours = 0;
+
+    if (isPm) {
+      if (hours < 12) hours += 12;
+    } else if (isAm) {
+      if (hours === 12) hours = 0;
+    } else {
+      // In academic schedules without explicit AM/PM, hours 1..6 represent afternoon PM (13:00..18:00)
+      if (hours >= 1 && hours <= 6) {
+        hours += 12;
+      }
+      // hours 7..12 represent daytime morning/noon
+      // hours >= 13 represent 24-hour military time
+    }
     return hours * 60 + mins;
   };
 
@@ -184,45 +195,64 @@ export function ClassroomMonitor() {
     return null;
   }, [routines, currentClockTime, currentDayName]);
 
-  // Next upcoming routine today for this room if currently between classes
-  const upcomingRoutine = useMemo(() => {
+  // Next upcoming routine (today later OR next scheduled day of the week)
+  const upcomingRoutineInfo = useMemo(() => {
     if (matchedRealTimeRoutine) return null;
     if (!routines || routines.length === 0) return null;
 
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const nowH = currentClockTime.getHours();
     const nowM = currentClockTime.getMinutes();
     const nowTotalMins = nowH * 60 + nowM;
+    const currentDayIdx = currentClockTime.getDay();
 
+    // 1. Check later today
     const todayRoutines = routines.filter(
       (r) => (r.day || "").toLowerCase() === currentDayName.toLowerCase() && !r.is_gap
     );
 
-    let nextR = null;
+    let nextToday = null;
     let minDiff = Infinity;
-
     for (const r of todayRoutines) {
       const range = parseSlotRange(r.time_slot, r);
       if (range && range.startMins > nowTotalMins) {
         const diff = range.startMins - nowTotalMins;
         if (diff < minDiff) {
           minDiff = diff;
-          nextR = r;
+          nextToday = { routine: r, isToday: true, dayName: currentDayName };
         }
       }
     }
-    return nextR;
+    if (nextToday) return nextToday;
+
+    // 2. Check future days in the upcoming week
+    for (let offset = 1; offset < 7; offset++) {
+      const targetDayIdx = (currentDayIdx + offset) % 7;
+      const targetDayName = dayNames[targetDayIdx];
+      const dayRoutines = routines
+        .filter((r) => (r.day || "").toLowerCase() === targetDayName.toLowerCase() && !r.is_gap)
+        .map((r) => ({ r, range: parseSlotRange(r.time_slot, r) }))
+        .filter((item) => item.range !== null)
+        .sort((a, b) => a.range.startMins - b.range.startMins);
+
+      if (dayRoutines.length > 0) {
+        return {
+          routine: dayRoutines[0].r,
+          isToday: false,
+          dayName: targetDayName,
+        };
+      }
+    }
+
+    return null;
   }, [routines, matchedRealTimeRoutine, currentClockTime, currentDayName]);
 
-  // Active Effective Routine (Manual override if selected, otherwise automatic real-time matched routine, or first room routine)
+  // Active Effective Routine (Automatic real-time matched routine, or next upcoming routine, or first room routine)
   const activeEffectiveRoutine = useMemo(() => {
-    if (manualSelectedRoutineId) {
-      const manual = routines.find((r) => r.id === manualSelectedRoutineId);
-      if (manual) return manual;
-    }
     if (matchedRealTimeRoutine) return matchedRealTimeRoutine;
-    if (upcomingRoutine) return upcomingRoutine;
+    if (upcomingRoutineInfo?.routine) return upcomingRoutineInfo.routine;
     return routines.find((r) => !r.is_gap) || routines[0] || null;
-  }, [manualSelectedRoutineId, matchedRealTimeRoutine, upcomingRoutine, routines]);
+  }, [matchedRealTimeRoutine, upcomingRoutineInfo, routines]);
 
   // Active Course Identifiers
   const activeCourseCode = activeEffectiveRoutine?.course_code || "CSE-311";
@@ -231,9 +261,22 @@ export function ClassroomMonitor() {
   const isClassCurrentlyLive = !!matchedRealTimeRoutine && !matchedRealTimeRoutine.is_gap;
   const isGapOrBreak = !!matchedRealTimeRoutine?.is_gap;
 
-  // Fetch classroom session status from backend
+  // Fetch classroom session status from backend (Only if currently live)
   const fetchClassroomStatus = useCallback(async () => {
-    if (!selectedRoomId || !activeCourseCode) return;
+    if (!isClassCurrentlyLive || !selectedRoomId || !activeCourseCode) {
+      if (!isClassCurrentlyLive) {
+        setClassroomData({
+          total_enrolled: 0,
+          present_count: 0,
+          stepped_out_count: 0,
+          absent_count: 0,
+          guest_count: 0,
+          roster: [],
+          event_logs: [],
+        });
+      }
+      return;
+    }
     try {
       const res = await api.getClassroomStatus(selectedRoomId, activeCourseCode);
       if (res.success && res.is_active) {
@@ -250,7 +293,7 @@ export function ClassroomMonitor() {
     } catch (e) {
       console.warn("Error fetching classroom status:", e);
     }
-  }, [selectedRoomId, activeCourseCode]);
+  }, [isClassCurrentlyLive, selectedRoomId, activeCourseCode]);
 
   useEffect(() => {
     fetchClassroomStatus();
@@ -343,45 +386,63 @@ export function ClassroomMonitor() {
       ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
       const b64Image = captureCanvas.toDataURL("image/jpeg", 0.7);
 
-      // Call Classroom Monitoring API
-      const result = await api.processClassroomFrame({
-        image: b64Image,
-        room_id: selectedRoomId || "room-101",
-        department: activeEffectiveRoutine?.department || "ALL",
-        course_code: activeCourseCode,
-        course_name: activeCourseName,
-        day: currentDayName,
-        time_slot: activeTimeSlot,
-        absence_threshold_sec: absenceThresholdSec,
-        threshold: threshold || 0.45,
-      });
-
-      const faces = result.faces || [];
-      const latency = Math.round(performance.now() - startTime);
-
-      setInferenceTime(latency);
-      setFaceCount(faces.length);
-
-      if (result.classroom) {
-        setClassroomData({
-          total_enrolled: result.classroom.total_enrolled || 0,
-          present_count: result.classroom.present_count || 0,
-          stepped_out_count: result.classroom.stepped_out_count || 0,
-          absent_count: result.classroom.absent_count || 0,
-          guest_count: result.classroom.guest_count || 0,
-          roster: result.classroom.roster || [],
-          event_logs: result.classroom.event_logs || [],
+      if (isClassCurrentlyLive) {
+        // LIVE CLASS: Call Classroom Monitoring API (logs attendance & presence state)
+        const result = await api.processClassroomFrame({
+          image: b64Image,
+          room_id: selectedRoomId || "room-101",
+          department: activeEffectiveRoutine?.department || "ALL",
+          course_code: activeCourseCode,
+          course_name: activeCourseName,
+          day: currentDayName,
+          time_slot: activeTimeSlot,
+          absence_threshold_sec: absenceThresholdSec,
+          threshold: threshold || 0.45,
         });
-      }
 
-      // Draw high-FPS Cyber HUD overlays
-      drawClassroomFaceDetections(
-        canvas,
-        faces,
-        isMirrored,
-        captureCanvas.width,
-        captureCanvas.height
-      );
+        const faces = result.faces || [];
+        const latency = Math.round(performance.now() - startTime);
+
+        setInferenceTime(latency);
+        setFaceCount(faces.length);
+
+        if (result.classroom) {
+          setClassroomData({
+            total_enrolled: result.classroom.total_enrolled || 0,
+            present_count: result.classroom.present_count || 0,
+            stepped_out_count: result.classroom.stepped_out_count || 0,
+            absent_count: result.classroom.absent_count || 0,
+            guest_count: result.classroom.guest_count || 0,
+            roster: result.classroom.roster || [],
+            event_logs: result.classroom.event_logs || [],
+          });
+        }
+
+        // Draw high-FPS Cyber HUD overlays
+        drawClassroomFaceDetections(
+          canvas,
+          faces,
+          isMirrored,
+          captureCanvas.width,
+          captureCanvas.height
+        );
+      } else {
+        // STANDBY CCTV: Standard camera feed with face recognition; no attendance or absence penalties
+        const result = await api.recognizeFrame(b64Image, threshold || 0.45, selectedRoomId || "ALL");
+        const faces = result.faces || [];
+        const latency = Math.round(performance.now() - startTime);
+
+        setInferenceTime(latency);
+        setFaceCount(faces.length);
+
+        drawClassroomFaceDetections(
+          canvas,
+          faces,
+          isMirrored,
+          captureCanvas.width,
+          captureCanvas.height
+        );
+      }
 
       // Telemetry FPS
       fpsTracker.current.count++;
@@ -397,6 +458,7 @@ export function ClassroomMonitor() {
       isProcessingRef.current = false;
     }
   }, [
+    isClassCurrentlyLive,
     selectedRoomId,
     activeEffectiveRoutine,
     activeCourseCode,
@@ -444,7 +506,7 @@ export function ClassroomMonitor() {
   return (
     <div className="flex flex-col gap-4">
       {/* 0. CLASSROOM SELECTOR & REAL-TIME ROUTINE SYNC BAR */}
-      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/95 to-indigo-950/40 border border-indigo-500/30 shadow-xl flex flex-wrap items-center justify-between gap-3 backdrop-blur-md">
+      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/95 to-indigo-950/40 border border-indigo-500/30 shadow-xl flex flex-wrap items-center justify-between gap-4 backdrop-blur-md">
         {/* Left: Classroom Selector Dropdown */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-neon-indigo flex-shrink-0">
@@ -458,10 +520,7 @@ export function ClassroomMonitor() {
             <div className="flex items-center gap-2 mt-0.5">
               <select
                 value={selectedRoomId}
-                onChange={(e) => {
-                  setSelectedRoomId(e.target.value);
-                  setManualSelectedRoutineId("");
-                }}
+                onChange={(e) => setSelectedRoomId(e.target.value)}
                 className="bg-slate-950 border border-indigo-500/40 rounded-xl px-3 py-1.5 text-xs text-white font-bold font-mono outline-none focus:border-cyan-400 transition cursor-pointer shadow-inner pr-8"
               >
                 {rooms.map((r) => (
@@ -474,10 +533,10 @@ export function ClassroomMonitor() {
           </div>
         </div>
 
-        {/* Center: Live Clock & Real-Time Routine Status Badge */}
-        <div className="flex flex-col items-start">
+        {/* Right: Live Clock & Real-Time Routine Status Badge */}
+        <div className="flex flex-col items-start md:items-end gap-1">
           <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-            <span className="flex items-center gap-1.5 text-slate-300 font-bold bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-800">
+            <span className="flex items-center gap-1.5 text-slate-300 font-bold bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-800 shadow-sm">
               <Clock className="w-3.5 h-3.5 text-amber-400" />
               {currentDayName}, {currentClockTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </span>
@@ -488,57 +547,49 @@ export function ClassroomMonitor() {
                 Live Class: {activeCourseCode} • {activeTimeSlot}
               </span>
             ) : isGapOrBreak ? (
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold shadow-[0_0_10px_rgba(245,158,11,0.2)]">
                 ☕ Recess / Free Interval • {activeTimeSlot}
               </span>
-            ) : upcomingRoutine ? (
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">
-                ⏳ Next Up: {upcomingRoutine.course_code} ({upcomingRoutine.time_slot})
+            ) : upcomingRoutineInfo?.isToday ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-semibold shadow-[0_0_10px_rgba(99,102,241,0.2)]">
+                ⏳ Upcoming Class: {upcomingRoutineInfo.routine.course_code} • {upcomingRoutineInfo.routine.time_slot}
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700">
-                ⚪ Camera Standby
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-800/80 text-slate-300 border border-slate-700 font-semibold">
+                ⚪ No Class Today
               </span>
             )}
           </div>
 
-          <div className="text-[11px] text-slate-400 font-mono mt-1 truncate max-w-md">
-            {activeEffectiveRoutine ? (
+          <div className="text-[11px] text-slate-300 font-mono text-left md:text-right">
+            {isClassCurrentlyLive && activeEffectiveRoutine ? (
               <span>
                 <strong className="text-white font-semibold">{activeCourseName}</strong>
                 {activeEffectiveRoutine.instructor ? ` • Instructor: ${activeEffectiveRoutine.instructor}` : ""}
                 {activeEffectiveRoutine.section ? ` (${activeEffectiveRoutine.section})` : ""}
               </span>
+            ) : isGapOrBreak ? (
+              upcomingRoutineInfo ? (
+                <span className="text-slate-400">
+                  Next Today: <strong className="text-slate-200 font-medium">{upcomingRoutineInfo.routine.course_name}</strong> ({upcomingRoutineInfo.routine.course_code}) at {upcomingRoutineInfo.routine.time_slot}
+                </span>
+              ) : (
+                <span className="text-slate-400">Interval / Break Period</span>
+              )
+            ) : upcomingRoutineInfo?.isToday ? (
+              <span>
+                <strong className="text-white font-semibold">{upcomingRoutineInfo.routine.course_name}</strong>
+                {upcomingRoutineInfo.routine.instructor ? ` • Instructor: ${upcomingRoutineInfo.routine.instructor}` : ""}
+                {upcomingRoutineInfo.routine.section ? ` (${upcomingRoutineInfo.routine.section})` : ""}
+              </span>
+            ) : upcomingRoutineInfo ? (
+              <span className="text-slate-400">
+                Next Scheduled: <strong className="text-slate-200 font-semibold">{upcomingRoutineInfo.routine.course_name}</strong> ({upcomingRoutineInfo.routine.course_code}) • {upcomingRoutineInfo.dayName}, {upcomingRoutineInfo.routine.time_slot}
+              </span>
             ) : (
-              "No routine slots configured for this room yet."
+              <span className="text-slate-500">No scheduled classes configured for this room.</span>
             )}
           </div>
-        </div>
-
-        {/* Right: Quick Routine Slot Selector / Override */}
-        <div className="flex items-center gap-2">
-          {routines.length > 0 && (
-            <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
-              <span className="text-[10px] text-slate-400 font-mono hidden md:inline">Slot:</span>
-              <select
-                value={activeEffectiveRoutine?.id || ""}
-                onChange={(e) => setManualSelectedRoutineId(e.target.value)}
-                className="bg-transparent text-indigo-300 font-bold font-mono outline-none text-xs cursor-pointer max-w-[170px] truncate"
-                title="Manually override or pick class slot"
-              >
-                {matchedRealTimeRoutine && (
-                  <option value={matchedRealTimeRoutine.id} className="bg-slate-900 text-emerald-300 font-bold">
-                    ⚡ Auto Live: {matchedRealTimeRoutine.time_slot} ({matchedRealTimeRoutine.course_code})
-                  </option>
-                )}
-                {routines.map((r) => (
-                  <option key={r.id} value={r.id} className="bg-slate-900 text-white">
-                    {r.day} • {r.time_slot} • {r.course_code}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
         </div>
       </div>
 
@@ -552,9 +603,9 @@ export function ClassroomMonitor() {
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-bold font-mono text-indigo-400">
-              {classroomData.total_enrolled}
+              {isClassCurrentlyLive ? classroomData.total_enrolled : 0}
             </span>
-            <span className="text-[10px] text-slate-500">Students</span>
+            <span className="text-[10px] text-slate-500">{isClassCurrentlyLive ? "Students" : "Standby"}</span>
           </div>
         </div>
 
@@ -566,15 +617,15 @@ export function ClassroomMonitor() {
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-bold font-mono text-emerald-400">
-              {classroomData.present_count}
+              {isClassCurrentlyLive ? classroomData.present_count : 0}
             </span>
-            <span className="text-[10px] text-emerald-500/80">Active</span>
+            <span className="text-[10px] text-emerald-500/80">{isClassCurrentlyLive ? "Active" : "Standby"}</span>
           </div>
         </div>
 
         {/* Stepped Out */}
         <div className={`glass-card p-3 flex flex-col gap-1 border-l-4 ${
-          classroomData.stepped_out_count > 0 ? "border-l-amber-500 bg-amber-950/20 animate-pulse" : "border-l-slate-700"
+          isClassCurrentlyLive && classroomData.stepped_out_count > 0 ? "border-l-amber-500 bg-amber-950/20 animate-pulse" : "border-l-slate-700"
         }`}>
           <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
             <Footprints className="w-3.5 h-3.5 text-amber-400" />
@@ -582,9 +633,9 @@ export function ClassroomMonitor() {
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-bold font-mono text-amber-400">
-              {classroomData.stepped_out_count}
+              {isClassCurrentlyLive ? classroomData.stepped_out_count : 0}
             </span>
-            <span className="text-[10px] text-amber-500/80">&gt;{absenceThresholdSec}s away</span>
+            <span className="text-[10px] text-amber-500/80">{isClassCurrentlyLive ? `>${absenceThresholdSec}s away` : "Standby"}</span>
           </div>
         </div>
 
@@ -596,9 +647,9 @@ export function ClassroomMonitor() {
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-bold font-mono text-rose-400">
-              {classroomData.absent_count}
+              {isClassCurrentlyLive ? classroomData.absent_count : 0}
             </span>
-            <span className="text-[10px] text-slate-500">Missing</span>
+            <span className="text-[10px] text-slate-500">{isClassCurrentlyLive ? "Missing" : "Standby"}</span>
           </div>
         </div>
 
@@ -610,11 +661,11 @@ export function ClassroomMonitor() {
           </span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-bold font-mono text-cyan-300">
-              {classroomData.total_enrolled > 0
+              {isClassCurrentlyLive && classroomData.total_enrolled > 0
                 ? `${Math.round(((classroomData.present_count + classroomData.stepped_out_count) / classroomData.total_enrolled) * 100)}%`
-                : "0%"}
+                : isClassCurrentlyLive ? "0%" : "N/A"}
             </span>
-            <span className="text-[10px] text-cyan-500/80">{activeCourseCode}</span>
+            <span className="text-[10px] text-cyan-500/80">{isClassCurrentlyLive ? activeCourseCode : "Standby"}</span>
           </div>
         </div>
 
@@ -622,13 +673,15 @@ export function ClassroomMonitor() {
         <div className="glass-card p-3 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-400">Class Config</span>
-            <button
-              onClick={handleResetSession}
-              title="Reset class session attendance"
-              className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
+            {isClassCurrentlyLive && (
+              <button
+                onClick={handleResetSession}
+                title="Reset class session attendance"
+                className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <button
             onClick={() => setShowConfigModal(true)}
@@ -681,18 +734,28 @@ export function ClassroomMonitor() {
 
             {/* Top Viewport Header Tag */}
             <div className="absolute top-3 left-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-950/85 border border-indigo-500/50 text-[11px] font-mono text-slate-200 backdrop-blur-md">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-bold text-emerald-400">CLASSROOM SURVEILLANCE</span>
+              <span className={`w-2 h-2 rounded-full ${isClassCurrentlyLive ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+              <span className={`font-bold ${isClassCurrentlyLive ? "text-emerald-400" : "text-amber-400"}`}>
+                {isClassCurrentlyLive ? "CLASSROOM SURVEILLANCE" : "CCTV STANDBY FEED"}
+              </span>
               <span className="text-slate-500">•</span>
               <span className="text-indigo-300 font-semibold">{selectedRoomObj?.name || "Room 101"}</span>
-              <span className="text-slate-500">•</span>
-              <span className="text-cyan-400 font-semibold">{activeCourseCode}</span>
+              {isClassCurrentlyLive && (
+                <>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-cyan-400 font-semibold">{activeCourseCode}</span>
+                </>
+              )}
             </div>
 
             {/* Auto Attendance Mode Badge */}
             <div className="absolute top-3 right-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-950/85 border border-slate-700 text-[11px] font-mono text-indigo-300 backdrop-blur-md">
               <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Auto-Attendance: <strong className="text-emerald-400 font-bold">ACTIVE</strong></span>
+              {isClassCurrentlyLive ? (
+                <span>Auto-Attendance: <strong className="text-emerald-400 font-bold">ACTIVE</strong></span>
+              ) : (
+                <span>Attendance: <strong className="text-slate-400 font-bold">PAUSED (STANDBY)</strong></span>
+              )}
             </div>
           </div>
 
@@ -732,153 +795,227 @@ export function ClassroomMonitor() {
                     Live Student Presence Registry
                   </h3>
                   <span className="text-[11px] text-indigo-300 font-mono font-bold">
-                    {activeCourseCode} • {activeCourseName}
+                    {isClassCurrentlyLive ? `${activeCourseCode} • ${activeCourseName}` : "Classroom Surveillance Standby"}
                   </span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleResetSession}
-                  className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/40 text-[11px] font-mono font-bold transition flex items-center gap-1.5 shadow-sm hover:scale-[1.02]"
-                  title="Reset attendance session count (Fresh Count for Testing)"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
-                  Reset Count
-                </button>
-                <div className="flex flex-col items-end">
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-bold">
-                    {filteredRoster.length} Students
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-mono mt-0.5">
-                    {selectedRoomObj?.name || "Room"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Filter Tabs & Search Bar */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
-                  {["ALL", "PRESENT", "STEPPED_OUT", "ABSENT"].map((tab) => (
+                {isClassCurrentlyLive ? (
+                  <>
                     <button
-                      key={tab}
-                      onClick={() => setRosterFilter(tab)}
-                      className={`px-2 py-0.5 rounded font-bold transition ${
-                        rosterFilter === tab
-                          ? "bg-indigo-600 text-white shadow-sm"
-                          : "text-slate-400 hover:text-white"
-                      }`}
+                      type="button"
+                      onClick={handleResetSession}
+                      className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/40 text-[11px] font-mono font-bold transition flex items-center gap-1.5 shadow-sm hover:scale-[1.02]"
+                      title="Reset attendance session count (Fresh Count for Testing)"
                     >
-                      {tab === "ALL" ? "All" : tab === "PRESENT" ? "In Seat" : tab === "STEPPED_OUT" ? "Away" : "Absent"}
+                      <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                      Reset Count
                     </button>
-                  ))}
-                </div>
-
-                <span className="text-[10px] font-mono text-indigo-400">
-                  {activeTimeSlot}
-                </span>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-bold">
+                        {filteredRoster.length} Students
+                      </span>
+                      <span className="text-[9px] text-slate-400 font-mono mt-0.5">
+                        {selectedRoomObj?.name || "Room"}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400 font-bold">
+                    STANDBY
+                  </span>
+                )}
               </div>
-
-              <input
-                type="text"
-                placeholder="Search student name or roll..."
-                value={filterSearch}
-                onChange={(e) => setFilterSearch(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition"
-              />
             </div>
 
-            {/* Student Presence List */}
-            <div className="flex flex-col gap-2 max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
-              {filteredRoster.length === 0 ? (
-                <div className="py-12 px-4 flex flex-col items-center justify-center text-center gap-2 text-slate-500">
-                  <Users className="w-8 h-8 text-slate-600" />
-                  <p className="text-xs font-semibold text-slate-400">No students detected in this filter.</p>
-                  <p className="text-[11px] text-slate-500 max-w-xs">
-                    Students detected by the classroom camera will automatically appear here with real-time presence status.
+            {!isClassCurrentlyLive ? (
+              <div className="py-12 px-4 flex flex-col items-center justify-center text-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-neon-indigo">
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <h4 className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider">
+                    CCTV Standby Mode Active
+                  </h4>
+                  <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
+                    No active class is running in this room right now. Camera functions as standard surveillance CCTV with real-time face detection. Live student presence tracking and absence logging will automatically activate when a scheduled class starts.
                   </p>
                 </div>
-              ) : (
-                filteredRoster.map((candidate) => {
-                  const isPresent = candidate.status === "PRESENT";
-                  const isSteppedOut = candidate.status === "STEPPED_OUT";
-                  const isAbsent = candidate.status === "ABSENT";
-
-                  return (
-                    <div
-                      key={candidate.id}
-                      onClick={() => setSelectedHistoryCandidate(candidate)}
-                      className={`p-2.5 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 hover:translate-x-0.5 ${
-                        isPresent
-                          ? "bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/60"
-                          : isSteppedOut
-                          ? "bg-amber-950/20 border-amber-500/30 hover:border-amber-500/60 animate-pulse"
-                          : "bg-slate-950/60 border-slate-800/80 hover:border-slate-700 opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                            isPresent
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                              : isSteppedOut
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                              : "bg-slate-800 text-slate-400 border border-slate-700"
+                {upcomingRoutineInfo?.isToday ? (
+                  <div className="px-3.5 py-2 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-[11px] font-mono text-indigo-300 flex items-center gap-2 shadow-sm">
+                    <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Next Class Today: <strong>{upcomingRoutineInfo.routine.course_code}</strong> ({upcomingRoutineInfo.routine.time_slot})</span>
+                  </div>
+                ) : upcomingRoutineInfo ? (
+                  <div className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-400 flex items-center gap-2">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Next Scheduled: {upcomingRoutineInfo.dayName}, {upcomingRoutineInfo.routine.time_slot}</span>
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-slate-500 font-mono">No routine scheduled for this room.</span>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Filter Tabs & Search Bar */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+                      {["ALL", "PRESENT", "STEPPED_OUT", "ABSENT"].map((tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setRosterFilter(tab)}
+                          className={`px-2 py-0.5 rounded font-bold transition ${
+                            rosterFilter === tab
+                              ? "bg-indigo-600 text-white shadow-sm"
+                              : "text-slate-400 hover:text-white"
                           }`}
                         >
-                          {candidate.name?.substring(0, 2).toUpperCase() || "ST"}
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                            {candidate.name}
-                            {candidate.roll_id && (
-                              <span className="text-[10px] font-mono text-slate-400">
-                                #{candidate.roll_id}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                            {isPresent && (
-                              <span className="text-emerald-400 font-medium">
-                                In at {candidate.first_detected_time} ({Math.round((candidate.in_class_seconds || 0) / 60)}m in class)
-                              </span>
-                            )}
-                            {isSteppedOut && (
-                              <span className="text-amber-400 font-medium">
-                                Left at {candidate.stepped_out_time} (Away: {candidate.stepped_out_duration_sec || 0}s)
-                              </span>
-                            )}
-                            {isAbsent && (
-                              <span className="text-slate-500">Not detected yet</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end flex-shrink-0">
-                        <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ${
-                            isPresent
-                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                              : isSteppedOut
-                              ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                              : "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                          }`}
-                        >
-                          {candidate.status}
-                        </span>
-                        <span className="text-[9px] text-indigo-400 hover:underline mt-1 flex items-center gap-0.5">
-                          <History className="w-2.5 h-2.5" /> Log
-                        </span>
-                      </div>
+                          {tab === "ALL" ? "All" : tab === "PRESENT" ? "In Seat" : tab === "STEPPED_OUT" ? "Away" : "Absent"}
+                        </button>
+                      ))}
                     </div>
-                  );
-                })
-              )}
-            </div>
+
+                    {/* Min In-Class Duration Filter */}
+                    <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800 text-[10px]">
+                      <Clock className="w-3 h-3 text-amber-400" />
+                      <span className="text-slate-400">Min Req:</span>
+                      <select
+                        value={minAttendanceMins}
+                        onChange={(e) => setMinAttendanceMins(Number(e.target.value))}
+                        className="bg-transparent text-amber-300 font-bold font-mono focus:outline-none cursor-pointer pr-0.5"
+                      >
+                        <option value={10} className="bg-slate-900">10m</option>
+                        <option value={15} className="bg-slate-900">15m</option>
+                        <option value={20} className="bg-slate-900">20m</option>
+                        <option value={25} className="bg-slate-900">25m</option>
+                        <option value={30} className="bg-slate-900">30m (Def)</option>
+                        <option value={35} className="bg-slate-900">35m</option>
+                        <option value={40} className="bg-slate-900">40m</option>
+                        <option value={45} className="bg-slate-900">45m</option>
+                      </select>
+                    </div>
+
+                    <span className="text-[10px] font-mono text-indigo-400">
+                      {activeTimeSlot}
+                    </span>
+                  </div>
+
+                  <input
+                    type="text"
+                    placeholder="Search student name or roll..."
+                    value={filterSearch}
+                    onChange={(e) => setFilterSearch(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition"
+                  />
+                </div>
+
+                {/* Student Presence List */}
+                <div className="flex flex-col gap-2 max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
+                  {filteredRoster.length === 0 ? (
+                    <div className="py-12 px-4 flex flex-col items-center justify-center text-center gap-2 text-slate-500">
+                      <Users className="w-8 h-8 text-slate-600" />
+                      <p className="text-xs font-semibold text-slate-400">No students detected in this filter.</p>
+                      <p className="text-[11px] text-slate-500 max-w-xs">
+                        Students detected by the classroom camera will automatically appear here with real-time presence status.
+                      </p>
+                    </div>
+                  ) : (
+                    filteredRoster.map((candidate) => {
+                      const inClassMins = Math.round((candidate.in_class_seconds || 0) / 60);
+                      const isQualified = inClassMins >= minAttendanceMins;
+                      const isPresent = candidate.status === "PRESENT";
+                      const isSteppedOut = candidate.status === "STEPPED_OUT";
+                      const isAbsent = candidate.status === "ABSENT";
+
+                      return (
+                        <div
+                          key={candidate.id}
+                          onClick={() => setSelectedHistoryCandidate(candidate)}
+                          className={`p-2.5 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 hover:translate-x-0.5 ${
+                            isPresent && isQualified
+                              ? "bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/60"
+                              : isPresent && !isQualified
+                              ? "bg-amber-950/20 border-amber-500/30 hover:border-amber-500/60"
+                              : isSteppedOut
+                              ? "bg-amber-950/20 border-amber-500/30 hover:border-amber-500/60 animate-pulse"
+                              : "bg-slate-950/60 border-slate-800/80 hover:border-slate-700 opacity-70 hover:opacity-100"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+                                isPresent && isQualified
+                                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                  : isPresent && !isQualified
+                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                  : isSteppedOut
+                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                  : "bg-slate-800 text-slate-400 border border-slate-700"
+                              }`}
+                            >
+                              {candidate.name?.substring(0, 2).toUpperCase() || "ST"}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                                {candidate.name}
+                                {candidate.roll_id && (
+                                  <span className="text-[10px] font-mono text-slate-400">
+                                    #{candidate.roll_id}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                {isPresent && isQualified && (
+                                  <span className="text-emerald-400 font-medium flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                    In at {candidate.first_detected_time} ({inClassMins}m in class • Qualified)
+                                  </span>
+                                )}
+                                {isPresent && !isQualified && (
+                                  <span className="text-amber-400 font-medium flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-amber-400" />
+                                    In at {candidate.first_detected_time} ({inClassMins}m / {minAttendanceMins}m min req)
+                                  </span>
+                                )}
+                                {isSteppedOut && (
+                                  <span className="text-amber-400 font-medium">
+                                    Left at {candidate.stepped_out_time} (Away: {candidate.stepped_out_duration_sec || 0}s)
+                                  </span>
+                                )}
+                                {isAbsent && (
+                                  <span className="text-slate-500">Not detected yet (0m / {minAttendanceMins}m)</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end flex-shrink-0">
+                            <span
+                              className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ${
+                                isPresent && isQualified
+                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                  : isPresent && !isQualified
+                                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                  : isSteppedOut
+                                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                  : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                              }`}
+                            >
+                              {isPresent && !isQualified ? `<${minAttendanceMins}m Low` : candidate.status}
+                            </span>
+                            <span className="text-[9px] text-indigo-400 hover:underline mt-1 flex items-center gap-0.5">
+                              <History className="w-2.5 h-2.5" /> Log
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1023,6 +1160,30 @@ export function ClassroomMonitor() {
                   How many seconds a student can be away from camera before status turns to &apos;STEPPED_OUT&apos;.
                 </p>
               </div>
+
+              {/* Minimum In-Class Duration for Attendance Qualification */}
+              <div className="pt-2 border-t border-slate-800/80">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-300">
+                    Minimum In-Class Duration for Attendance
+                  </label>
+                  <span className="text-xs font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                    {minAttendanceMins} Minutes
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="50"
+                  step="5"
+                  value={minAttendanceMins}
+                  onChange={(e) => setMinAttendanceMins(Number(e.target.value))}
+                  className="w-full accent-amber-400 cursor-pointer"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Students must spend at least this amount of time inside class to qualify as &apos;PRESENT&apos;. Under this duration will be marked as Absent.
+                </p>
+              </div>
             </div>
 
             <div className="flex justify-end pt-3 border-t border-slate-800">
@@ -1030,7 +1191,7 @@ export function ClassroomMonitor() {
                 onClick={() => setShowConfigModal(false)}
                 className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-neon-indigo"
               >
-                Apply Sensitivity
+                Apply Settings
               </button>
             </div>
           </div>

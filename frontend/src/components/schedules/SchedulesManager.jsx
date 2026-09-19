@@ -164,14 +164,13 @@ export function SchedulesManager() {
                 <th className="p-3.5">Time Window</th>
                 <th className="p-3.5">Allowed Dept(s)</th>
                 <th className="p-3.5">Assigned Hall(s)</th>
-                <th className="p-3.5">Washroom Limit</th>
                 <th className="p-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {schedules.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500 font-mono">
+                  <td colSpan={7} className="p-8 text-center text-slate-500 font-mono">
                     No exam schedules created yet. Click "Create Exam Schedule" to add timetables.
                   </td>
                 </tr>
@@ -241,9 +240,6 @@ export function SchedulesManager() {
                             );
                           })}
                         </div>
-                      </td>
-                      <td className="p-3.5 font-mono font-black text-rose-400">
-                        {sched.washroom_limit_minutes || 10} Mins
                       </td>
                       <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -354,18 +350,6 @@ export function SchedulesManager() {
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-mono focus:outline-none focus:border-cyber-cyan"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Washroom Time Limit (Minutes)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="60"
-                  value={editWashroomLimit}
-                  onChange={(e) => setEditWashroomLimit(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white font-mono font-bold focus:outline-none focus:border-cyber-cyan"
-                />
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">

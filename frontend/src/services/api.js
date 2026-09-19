@@ -64,7 +64,38 @@ export const api = {
   getAdmitCard: (candidateId) => request(`/api/admit-card/${candidateId}`),
 
   // Attendance
-  getAttendanceToday: (roomId = "") => request(`/api/attendance/today${roomId ? `?room_id=${encodeURIComponent(roomId)}` : ""}`),
+  getAttendanceToday: (roomId = "", date = "") => {
+    const q = new URLSearchParams();
+    if (roomId && roomId !== "ALL") q.append("room_id", roomId);
+    if (date) q.append("date", date);
+    const qs = q.toString();
+    return request(`/api/attendance${qs ? `?${qs}` : ""}`);
+  },
+  getAttendance: ({ roomId = "", date = "" } = {}) => {
+    const q = new URLSearchParams();
+    if (roomId && roomId !== "ALL") q.append("room_id", roomId);
+    if (date) q.append("date", date);
+    const qs = q.toString();
+    return request(`/api/attendance${qs ? `?${qs}` : ""}`);
+  },
+  getClassroomAttendance: ({ roomId = "", date = "", courseCode = "", minDurationMins = 30 } = {}) => {
+    const q = new URLSearchParams();
+    if (roomId && roomId !== "ALL") q.append("room_id", roomId);
+    if (date) q.append("date", date);
+    if (courseCode && courseCode !== "ALL") q.append("course_code", courseCode);
+    if (minDurationMins) q.append("min_duration_mins", minDurationMins);
+    const qs = q.toString();
+    return request(`/api/attendance/classroom${qs ? `?${qs}` : ""}`);
+  },
+  resetClassroomAttendance: ({ roomId = "", courseCode = "", date = "" } = {}) => {
+    const q = new URLSearchParams();
+    if (roomId && roomId !== "ALL") q.append("room_id", roomId);
+    if (date) q.append("date", date);
+    if (courseCode && courseCode !== "ALL") q.append("course_code", courseCode);
+    const qs = q.toString();
+    return request(`/api/attendance/classroom/reset${qs ? `?${qs}` : ""}`, { method: "POST" });
+  },
+  getStudentHistory: (candidateId) => request(`/api/students/${encodeURIComponent(candidateId)}/history`),
   executeAttendanceAction: (actionData) => request("/api/attendance/action", { method: "POST", body: JSON.stringify(actionData) }),
   updateAttendanceRecord: (candidateId, recordData) => request(`/api/attendance/records/${candidateId}`, { method: "PUT", body: JSON.stringify(recordData) }),
   deleteAttendanceRecord: (candidateId, dayKey = "") => request(`/api/attendance/records/${candidateId}${dayKey ? `?day_key=${encodeURIComponent(dayKey)}` : ""}`, { method: "DELETE" }),

@@ -245,7 +245,7 @@ class ClassroomFrameRequest(BaseModel):
     course_name: Optional[str] = "Class"
     day: Optional[str] = None
     time_slot: Optional[str] = None
-    absence_threshold_sec: Optional[int] = 45
+    absence_threshold_sec: Optional[int] = 15
     threshold: Optional[float] = 0.45
 
 class UpdateMonitoringConfigRequest(BaseModel):
@@ -943,10 +943,58 @@ async def mark_attendance_action(req: AttendanceActionRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.get("/api/attendance")
 @app.get("/api/attendance/today")
-async def get_today_attendance(room_id: Optional[str] = Query(None)):
-    data = db.get_today_attendance(room_id=room_id)
+async def get_attendance_sheet(
+    room_id: Optional[str] = Query(None),
+    date: Optional[str] = Query(None)
+):
+    data = db.get_today_attendance(room_id=room_id, day_key=date)
     return data
+
+@app.get("/api/attendance/classroom")
+async def get_classroom_attendance(
+    room_id: Optional[str] = Query(None),
+    date: Optional[str] = Query(None),
+    course_code: Optional[str] = Query(None),
+    min_duration_mins: Optional[int] = Query(30)
+):
+    data = db.get_classroom_attendance(
+        date_str=date,
+        room_id=room_id,
+        course_code=course_code,
+        min_duration_mins=min_duration_mins or 30
+    )
+    return data
+
+@app.post("/api/attendance/classroom/reset")
+async def reset_classroom_attendance(
+    room_id: Optional[str] = Query(None),
+    course_code: Optional[str] = Query(None),
+    date: Optional[str] = Query(None)
+):
+    if room_id and course_code:
+        db.reset_classroom_session(room_id=room_id, course_code=course_code)
+    else:
+        # Reset matching classroom sessions
+        day_k = date or db._get_today_key()
+        keys_to_del = [
+            k for k in db.classroom_sessions.keys()
+            if (not room_id or f"class_{room_id}_" in k) and (not date or day_k in k)
+        ]
+        for k in keys_to_del:
+            del db.classroom_sessions[k]
+        db._save_classroom_sessions()
+    return {"success": True, "message": "Classroom attendance session reset."}
+
+@app.get("/api/students/{candidate_id}/history")
+@app.get("/api/attendance/student-history/{candidate_id}")
+async def get_student_history_profile(candidate_id: str):
+    try:
+        data = db.get_student_history(candidate_id)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @app.get("/api/attendance/status/{candidate_id}")
 async def get_candidate_attendance_status(candidate_id: str, room_id: Optional[str] = Query(None)):
@@ -1179,7 +1227,7 @@ async def process_classroom_frame(req: ClassroomFrameRequest):
         course_code=req.course_code,
         course_name=req.course_name or req.course_code,
         detected_faces=results,
-        absence_threshold_sec=req.absence_threshold_sec or 45,
+        absence_threshold_sec=req.absence_threshold_sec or 15,
         day=req.day,
         time_slot=req.time_slot
     )

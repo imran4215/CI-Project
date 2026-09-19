@@ -16,7 +16,6 @@ export function AppProvider({ children }) {
   const [threshold, setThreshold] = useState(0.45);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [isMirrored, setIsMirrored] = useState(true);
-  const [autoPunch, setAutoPunch] = useState(false);
 
   // Exam & Room Info
   const [examName, setExamName] = useState("Final Semester Examination 2026");
@@ -27,25 +26,19 @@ export function AppProvider({ children }) {
   // Schedules & Timetable
   const [schedules, setSchedules] = useState([]);
   const [activeSchedule, setActiveSchedule] = useState(null);
-  const [washroomLimitMinutes, setWashroomLimitMinutes] = useState(10);
-  const [washroomActiveCandidates, setWashroomActiveCandidates] = useState([]);
-  const washroomOvertimeWarningGiven = useRef({});
 
   // Active Recognition State
   const [activeCandidate, setActiveCandidate] = useState(null);
   const [lastCandidateId, setLastCandidateId] = useState(null);
   const activeCandidateLockTime = useRef(0);
-  const autoPunchTriggered = useRef(false);
 
   // Data Caches
   const [attendanceData, setAttendanceData] = useState({
     records: [],
     total_candidates: 0,
     present_inside: 0,
-    in_washroom: 0,
     exited: 0,
     absent: 0,
-    washroom_violations: 0,
   });
   const [allocations, setAllocations] = useState([]);
   const [users, setUsers] = useState([]);
@@ -143,16 +136,6 @@ export function AppProvider({ children }) {
     }
   }, [selectedSheetRoom]);
 
-  // Load Active Washroom
-  const loadWashroomActive = useCallback(async () => {
-    try {
-      const data = await api.getActiveWashroom();
-      setWashroomActiveCandidates(data.active_washroom_candidates || []);
-    } catch (e) {
-      console.error("Error loading washroom active:", e);
-    }
-  }, []);
-
   const [departments, setDepartments] = useState([]);
   const [routines, setRoutines] = useState([]);
 
@@ -188,16 +171,7 @@ export function AppProvider({ children }) {
     loadUsers();
     loadAlerts();
     loadAttendance();
-    loadWashroomActive();
   }, []);
-
-  // Refresh Attendance & Washroom periodically
-  useEffect(() => {
-    const timer = setInterval(() => {
-      loadWashroomActive();
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [loadWashroomActive]);
 
   const [isLiveExamActive, setIsLiveExamActive] = useState(false);
 
@@ -316,8 +290,6 @@ export function AppProvider({ children }) {
         setSelectedDeviceId,
         isMirrored,
         setIsMirrored,
-        autoPunch,
-        setAutoPunch,
         examName,
         setExamName,
         rooms,
@@ -329,14 +301,11 @@ export function AppProvider({ children }) {
         schedules,
         activeSchedule,
         isLiveExamActive,
-        washroomLimitMinutes,
-        washroomActiveCandidates,
         activeCandidate,
         setActiveCandidate,
         lastCandidateId,
         setLastCandidateId,
         activeCandidateLockTime,
-        autoPunchTriggered,
         attendanceData,
         allocations,
         users,
@@ -361,8 +330,6 @@ export function AppProvider({ children }) {
         loadUsers,
         loadAlerts,
         loadAttendance,
-        loadWashroomActive,
-        washroomOvertimeWarningGiven,
       }}
     >
       {children}
