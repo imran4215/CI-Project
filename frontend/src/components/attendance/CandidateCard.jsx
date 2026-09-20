@@ -50,6 +50,8 @@ export function CandidateCard({
     loadAttendance,
     loadAlerts,
     setActiveTab,
+    signatureThreshold,
+    setSignatureThreshold,
   } = useApp();
 
   const [loadingAction, setLoadingAction] = useState(false);
@@ -150,7 +152,9 @@ export function CandidateCard({
   const handleAcceptSignature = useCallback(
     (dataUrl, matchRes) => {
       const cand = activeCandidate || detectedCandidate;
-      const isMatch = matchRes ? matchRes.is_match && matchRes.similarity_score >= 50.0 : true;
+      const reqThreshold = signatureThreshold || 0.60;
+      const reqPercent = Math.round(reqThreshold * 100);
+      const isMatch = matchRes ? matchRes.is_match && matchRes.similarity_score >= reqPercent : true;
 
       setSignatureData({
         hasSignature: true,
@@ -169,20 +173,20 @@ export function CandidateCard({
         triggerAudio("success");
         triggerVoice(`Signature verified for ${cand?.name || "candidate"}. Please tap student ID card.`);
         addToast(
-          `✅ Step 2 Passed: Signature Verified (${matchRes?.similarity_score || 100}% match) for ${cand?.name}! Please tap RFID ID Card.`,
+          `✅ Step 2 Passed: Signature Verified (${matchRes?.similarity_score || 100}% match ≥ ${reqPercent}%) for ${cand?.name}! Please tap RFID ID Card.`,
           "success"
         );
       } else {
         setIsSignatureStepPassed(false);
         triggerAudio("alert");
-        triggerVoice(`Signature mismatch for ${cand?.name}. Match score is below 50 percent.`);
+        triggerVoice(`Signature mismatch for ${cand?.name}. Match score is below ${reqPercent} percent.`);
         addToast(
-          `❌ Signature Mismatch: Live signature did NOT match reference for ${cand?.name}! (Match: ${matchRes?.similarity_score}%, Required: 50%+)`,
+          `❌ Signature Mismatch: Live signature did NOT match reference for ${cand?.name}! (Match: ${matchRes?.similarity_score}%, Required: ${reqPercent}%+)`,
           "error"
         );
       }
     },
-    [activeCandidate, detectedCandidate, triggerAudio, triggerVoice, addToast]
+    [activeCandidate, detectedCandidate, signatureThreshold, triggerAudio, triggerVoice, addToast]
   );
 
   // Handle Step 3: RFID Smart ID Card Scan
@@ -872,18 +876,42 @@ export function CandidateCard({
                 </div>
 
                 <p className="text-[11px] text-slate-300">
-                  Candidate must sign on the graphics tablet / canvas to match registered signature (≥50% threshold).
+                  Candidate must sign on the graphics tablet / canvas to match registered signature (≥{Math.round((signatureThreshold || 0.60) * 100)}% threshold).
                 </p>
+
+                {/* Interactive Match Threshold Selector */}
+                <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono">
+                  <span className="text-slate-400">Match Req Threshold:</span>
+                  <div className="flex items-center gap-1">
+                    {[0.40, 0.50, 0.60, 0.70, 0.80].map((th) => (
+                      <button
+                        key={th}
+                        type="button"
+                        onClick={() => {
+                          setSignatureThreshold(th);
+                          addToast(`🎯 Signature threshold set to ${(th * 100).toFixed(0)}%`, "info");
+                        }}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                          signatureThreshold === th
+                            ? "bg-amber-500 text-slate-950 shadow-sm"
+                            : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                        }`}
+                      >
+                        {(th * 100).toFixed(0)}%{th === 0.60 ? " (Def)" : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 {/* If signature failed match */}
                 {signatureData.matchResult && !signatureData.matchResult.is_match && (
                   <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/40 flex flex-col gap-1.5">
                     <div className="flex items-center justify-between text-xs font-mono font-bold text-rose-300">
                       <span>⚠️ Signature Mismatch: {signatureData.matchResult.similarity_score}%</span>
-                      <span>Min: 50%</span>
+                      <span>Min: {Math.round((signatureThreshold || 0.60) * 100)}%</span>
                     </div>
                     <p className="text-[10px] text-rose-200">
-                      Signature similarity did not reach the 50% threshold. Candidate may re-sign or Invigilator can grant override approval.
+                      Signature similarity did not reach the {Math.round((signatureThreshold || 0.60) * 100)}% threshold. Candidate may re-sign or Invigilator can grant override approval.
                     </p>
                     <div className="flex gap-2 pt-1">
                       <button
@@ -947,33 +975,61 @@ export function CandidateCard({
 
                 {/* Signature Match Summary & Re-Sign Option */}
                 {signatureData.hasSignature && (
-                  <div className="p-2.5 rounded-xl bg-slate-950/90 border border-emerald-500/30 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-12 h-8 rounded bg-slate-900 border border-emerald-500/40 flex items-center justify-center p-0.5 overflow-hidden flex-shrink-0">
-                        <img
-                          src={signatureData.dataUrl}
-                          alt="Signature"
-                          className="w-full h-full object-contain filter brightness-125"
-                        />
+                  <div className="p-2.5 rounded-xl bg-slate-950/90 border border-emerald-500/30 flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-12 h-8 rounded bg-slate-900 border border-emerald-500/40 flex items-center justify-center p-0.5 overflow-hidden flex-shrink-0">
+                          <img
+                            src={signatureData.dataUrl}
+                            alt="Signature"
+                            className="w-full h-full object-contain filter brightness-125"
+                          />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[11px] font-bold text-emerald-300 truncate">
+                            Signature: {signatureData.isOverridden ? "Override Approved" : `${signatureData.matchResult?.similarity_score || 100}% Match`}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {signatureData.matchResult?.similarity_score >= Math.round((signatureThreshold || 0.60) * 100) || signatureData.isOverridden
+                              ? `Verified ≥ ${Math.round((signatureThreshold || 0.60) * 100)}%`
+                              : `Mismatch < ${Math.round((signatureThreshold || 0.60) * 100)}%`}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-[11px] font-bold text-emerald-300 truncate">
-                          Signature: {signatureData.isOverridden ? "Override Approved" : `${signatureData.matchResult?.similarity_score || 100}% Match`}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {signatureData.matchResult?.similarity_score >= 50.0 || signatureData.isOverridden ? "Verified ≥ 50%" : "Mismatch"}
-                        </span>
-                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsSignatureModalOpen(true)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border border-slate-700 text-[11px] font-mono font-bold flex items-center gap-1 transition cursor-pointer flex-shrink-0 shadow-sm"
+                        title="Click to view signature comparison and re-sign"
+                      >
+                        <PenTool className="w-3 h-3 text-cyan-400" /> Re-Sign
+                      </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setIsSignatureModalOpen(true)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border border-slate-700 text-[11px] font-mono font-bold flex items-center gap-1 transition cursor-pointer flex-shrink-0 shadow-sm"
-                      title="Click to view signature comparison and re-sign"
-                    >
-                      <PenTool className="w-3 h-3 text-cyan-400" /> Re-Sign
-                    </button>
+                    {/* Quick Threshold Adjuster */}
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/80 text-[10px] font-mono text-slate-400">
+                      <span>Threshold Req:</span>
+                      <div className="flex items-center gap-1">
+                        {[0.40, 0.50, 0.60, 0.70, 0.80].map((th) => (
+                          <button
+                            key={th}
+                            type="button"
+                            onClick={() => {
+                              setSignatureThreshold(th);
+                              addToast(`🎯 Signature threshold set to ${(th * 100).toFixed(0)}%`, "info");
+                            }}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition ${
+                              signatureThreshold === th
+                                ? "bg-amber-500 text-slate-950 shadow-sm"
+                                : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                            }`}
+                          >
+                            {(th * 100).toFixed(0)}%{th === 0.60 ? " (Def)" : ""}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -1058,7 +1114,7 @@ export function CandidateCard({
                   onClick={handleResetVerification}
                   className="w-full py-1.5 px-3 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 text-[11px] font-mono flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
-                  <RotateCcw className="w-3 h-3" /> Reset Entrance Verification
+                  <RotateCcw className="w-3.5 h-3.5" /> Reset Entrance Verification
                 </button>
               </div>
             )}
@@ -1092,6 +1148,7 @@ export function CandidateCard({
         registeredSignatureUrl={activeCandidate?.registeredSignature || activeCandidate?.registered_signature || detectedCandidate?.registered_signature || detectedCandidate?.registeredSignature}
         initialSignature={signatureData.dataUrl}
         initialMatchResult={signatureData.matchResult}
+        threshold={signatureThreshold}
         onAcceptSignature={handleAcceptSignature}
       />
     </div>

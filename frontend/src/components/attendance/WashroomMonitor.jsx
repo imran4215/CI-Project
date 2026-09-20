@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useApp } from "../../context/AppContext";
 import { Bath, CheckCircle2, AlertOctagon } from "lucide-react";
 
 export function WashroomMonitor() {
-  const { attendanceData } = useApp();
+  const { attendanceData, washroomLimitMinutes, triggerAudio, triggerVoice } = useApp();
   const [nowTime, setNowTime] = useState(Date.now());
+  const washroomOvertimeWarningGiven = useRef({});
 
   useEffect(() => {
     const timer = setInterval(() => setNowTime(Date.now()), 1000);

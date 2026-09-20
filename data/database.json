@@ -51,21 +51,21 @@
       "signature": "faces/d171c7d7/signature.png",
       "angle_count": 5
     },
-    "faea207a": {
-      "id": "faea207a",
-      "name": "Imran",
+    "ac502693": {
+      "id": "ac502693",
+      "name": "Ahmed Al Imran",
       "roll_id": "202314117",
       "department": "Computer Science & Engineering",
       "rfid_tag": "0015122682",
-      "created_at": "2026-09-19T23:14:27.575162",
+      "created_at": "2026-09-20T05:39:08.053006",
       "images": {
-        "front": "faces/faea207a/front.jpg",
-        "left": "faces/faea207a/left.jpg",
-        "right": "faces/faea207a/right.jpg",
-        "up": "faces/faea207a/up.jpg",
-        "down": "faces/faea207a/down.jpg"
+        "front": "faces/ac502693/front.jpg",
+        "left": "faces/ac502693/left.jpg",
+        "right": "faces/ac502693/right.jpg",
+        "up": "faces/ac502693/up.jpg",
+        "down": "faces/ac502693/down.jpg"
       },
-      "signature": "faces/faea207a/signature.png",
+      "signature": "faces/ac502693/signature.png",
       "angle_count": 5
     }
   }

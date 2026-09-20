@@ -1,1 +1,31 @@
-[]
+[
+  {
+    "id": "sched-9243fce7",
+    "title": "Data Structures & Algorithms - Semester Final",
+    "course_code": "CSE-2101",
+    "date": "2026-09-20",
+    "start_time": "05:00",
+    "end_time": "22:00",
+    "departments": [
+      "Computer Science & Engineering"
+    ],
+    "hall_ids": [
+      "room-101",
+      "room-202",
+      "room-405"
+    ],
+    "washroom_limit_minutes": 10,
+    "entry_grace_minutes": 30,
+    "enrolled_student_ids": [
+      "ac502693"
+    ],
+    "student_clearance_map": {},
+    "hall_student_map": {
+      "room-101": [
+        "ac502693"
+      ]
+    },
+    "status": "SCHEDULED",
+    "created_at": "2026-09-20T05:39:32.825425"
+  }
+]

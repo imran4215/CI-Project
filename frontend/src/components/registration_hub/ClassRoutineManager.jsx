@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 
 export const STANDARD_TIME_SLOTS = [
+  { id: "slot-0", label: "05:30 AM - 06:50 AM", displayLabel: "05:30 AM - 06:50 AM", start: "05:30", end: "06:50" },
   { id: "slot-1", label: "09:00 AM - 09:50 AM", displayLabel: "09:00 AM - 09:50 AM", start: "09:00", end: "09:50" },
   { id: "slot-2", label: "10:00 AM - 10:50 AM", displayLabel: "10:00 AM - 10:50 AM", start: "10:00", end: "10:50" },
   { id: "slot-3", label: "11:00 AM - 11:50 AM", displayLabel: "11:00 AM - 11:50 AM", start: "11:00", end: "11:50" },

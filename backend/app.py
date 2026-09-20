@@ -76,13 +76,13 @@ class Verify3FactorRequest(BaseModel):
     signature: Optional[str] = None
     face_image: Optional[str] = None
     active_room_id: Optional[str] = None
-    signature_threshold: Optional[float] = 0.50
+    signature_threshold: Optional[float] = 0.60
     face_threshold: Optional[float] = 0.45
 
 class VerifySignatureRequest(BaseModel):
     candidate_id: str
     signature: str  # Base64 live signature from tablet
-    threshold: Optional[float] = 0.50
+    threshold: Optional[float] = 0.60
 
 class RecognizeRequest(BaseModel):
     image: str
@@ -518,8 +518,8 @@ def verify_three_factor_entry(req: Verify3FactorRequest):
         if face_img is not None:
             face_val = engine.validate_and_extract_face(face_img, min_confidence=0.45)
             if face_val["success"] and face_val.get("embedding") is not None:
-                matched_user = engine.find_matching_registered_user(face_val["embedding"], threshold=req.face_threshold or 0.363)
-                if not matched_user or matched_user["user_id"] != rfid_user["id"]:
+                matched_user = engine.find_matching_registered_user(face_val["embedding"], threshold=req.face_threshold or 0.45)
+                if not matched_user or matched_user["user_id"] != rfid_user["id"] or matched_user.get("confidence_percent", 0) < 80.0:
                     detected_name = matched_user["name"] if matched_user else "Unknown Person"
                     # Log security proxy alert
                     db.log_proxy_alert(
@@ -529,7 +529,7 @@ def verify_three_factor_entry(req: Verify3FactorRequest):
                     )
                     raise HTTPException(
                         status_code=400,
-                        detail=f"❌ Biometric Face Mismatch: Detected face ({detected_name}) does NOT match RFID Card holder '{rfid_user['name']}' ({rfid_user.get('roll_id', 'N/A')})!"
+                        detail=f"❌ Biometric Face Mismatch: Detected face ({detected_name}) does NOT match RFID Card holder '{rfid_user['name']}' ({rfid_user.get('roll_id', 'N/A')}) with ≥80% match!"
                     )
 
     # Factor 3: Signature Verification
@@ -579,7 +579,7 @@ async def verify_signature(req: VerifySignatureRequest):
     result = sig_engine.compare_signatures(
         registered_bytes=reg_bytes,
         live_bytes=live_bytes,
-        threshold=req.threshold or 0.50
+        threshold=req.threshold if req.threshold is not None else 0.60
     )
 
     reg_path = db.get_candidate_signature_path(req.candidate_id)

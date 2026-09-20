@@ -114,7 +114,7 @@ export const api = {
   deleteUser: (userId) => request(`/api/users/${userId}`, { method: "DELETE" }),
   validateAngle: (angleData) => request("/api/validate-angle", { method: "POST", body: JSON.stringify(angleData) }),
   registerCandidate: (formData) => request("/api/register", { method: "POST", body: formData }),
-  verifySignature: (candidateId, signatureB64, threshold = 0.50) =>
+  verifySignature: (candidateId, signatureB64, threshold = 0.60) =>
     request("/api/signature/verify", {
       method: "POST",
       body: JSON.stringify({

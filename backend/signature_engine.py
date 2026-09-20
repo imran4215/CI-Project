@@ -19,7 +19,7 @@ class SignatureEngine:
     signature verification.
     """
 
-    def __init__(self, target_width: int = 256, target_height: int = 128, default_threshold: float = 0.50):
+    def __init__(self, target_width: int = 256, target_height: int = 128, default_threshold: float = 0.60):
         self.target_width = target_width
         self.target_height = target_height
         self.default_threshold = default_threshold

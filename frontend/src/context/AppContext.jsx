@@ -14,6 +14,7 @@ export function AppProvider({ children }) {
   const [voiceAnnounce, setVoiceAnnounce] = useState(false);
   const [audioBeep, setAudioBeep] = useState(false);
   const [threshold, setThreshold] = useState(0.45);
+  const [signatureThreshold, setSignatureThreshold] = useState(0.60); // 60% default biometric threshold
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [isMirrored, setIsMirrored] = useState(true);
 
@@ -174,6 +175,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const [isLiveExamActive, setIsLiveExamActive] = useState(false);
+  const [washroomLimitMinutes, setWashroomLimitMinutes] = useState(10);
 
   // Helper to add/subtract minutes
   const addMinutes = (timeStr, mins) => {
@@ -286,6 +288,8 @@ export function AppProvider({ children }) {
         setAudioBeep,
         threshold,
         setThreshold,
+        signatureThreshold,
+        setSignatureThreshold,
         selectedDeviceId,
         setSelectedDeviceId,
         isMirrored,
@@ -301,6 +305,8 @@ export function AppProvider({ children }) {
         schedules,
         activeSchedule,
         isLiveExamActive,
+        washroomLimitMinutes,
+        setWashroomLimitMinutes,
         activeCandidate,
         setActiveCandidate,
         lastCandidateId,

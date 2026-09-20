@@ -121,6 +121,7 @@ def get_default_schedules():
 def get_default_class_routines():
     return [
         # Room 101 - Sunday
+        {"id": "rt-101-sun-0", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "05:30 AM - 06:50 AM", "start_time": "05:30", "end_time": "06:50", "is_gap": False, "course_code": "CSE-1101", "course_name": "Structured Programming Language", "instructor": "Tanvir Ahmed", "section": "Section A", "semester": "1st", "remarks": "Early Lecture Hall 101"},
         {"id": "rt-101-sun-1", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "09:00 AM - 09:50 AM", "start_time": "09:00", "end_time": "09:50", "is_gap": False, "course_code": "CSE-2101", "course_name": "Data Structures & Algorithms", "instructor": "Dr. Tariq Rahman", "section": "Section A", "semester": "3rd", "remarks": "Lecture Hall 101"},
         {"id": "rt-101-sun-2", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "10:00 AM - 10:50 AM", "start_time": "10:00", "end_time": "10:50", "is_gap": False, "course_code": "CSE-3101", "course_name": "Database Management Systems", "instructor": "Prof. Mahmudul Hasan", "section": "Section B", "semester": "5th", "remarks": "Lecture Hall 101"},
         {"id": "rt-101-sun-3", "room_id": "room-101", "department": "Computer Science & Engineering", "day": "Sunday", "time_slot": "11:00 AM - 11:50 AM", "start_time": "11:00", "end_time": "11:50", "is_gap": False, "course_code": "CSE-4101", "course_name": "Artificial Intelligence & Neural Networks", "instructor": "Dr. A. K. Azad", "section": "Section A", "semester": "7th", "remarks": "Lecture Hall 101"},
@@ -2272,7 +2273,7 @@ class FaceDatabase:
 
         absence_threshold = self.monitoring_config.get("absence_threshold_sec", 15)
         gate_arrival_threshold = self.monitoring_config.get("gate_arrival_threshold_sec", 300)
-        grace_period = self.monitoring_config.get("grace_period_sec", 12)
+        grace_period = self.monitoring_config.get("grace_period_sec", 5)
 
         room_key = active_room_id or "default-hall"
 
@@ -2442,7 +2443,10 @@ class FaceDatabase:
                     if stable_seen_sec < 5.0:
                         # Still in the 5-second verification window
                         cand_track["monitoring_status"] = "RETURNING"
-                        cand_track["posture_label"] = f"🟢 Verifying Return ({int(stable_seen_sec)}s/5s)"
+                        if not cand_track.get("has_been_seen_at_desk", False):
+                            cand_track["posture_label"] = f"🟢 Verifying Entry ({int(stable_seen_sec)}s/5s)"
+                        else:
+                            cand_track["posture_label"] = f"🟢 Verifying Return ({int(stable_seen_sec)}s/5s)"
                         cand_track["stable_seen_sec"] = round(stable_seen_sec, 1)
                         cand_track["is_verifying_return"] = True
                         cand_track["posture"] = face_info.get("posture", "ATTENTIVE")
@@ -2780,52 +2784,116 @@ class FaceDatabase:
 
                 if u_id in sess["candidates"]:
                     c_data = sess["candidates"][u_id]
-                    old_status = c_data["status"]
+                    old_status = c_data.get("status", "ABSENT")
 
-                    # If first time detected in this class session -> Mark Attendance
-                    if not c_data["first_detected_at"]:
-                        c_data["first_detected_at"] = now_iso
-                        c_data["first_detected_time"] = now_time
-                        ev = {
-                            "id": f"ev-{uuid.uuid4().hex[:8]}",
-                            "candidate_id": u_id,
-                            "name": c_data["name"],
-                            "event": "CLASS_ENTRY",
-                            "time": now_time,
-                            "timestamp": now_iso,
-                            "label": f"{c_data['name']} entered classroom (Attendance Auto-Marked)",
-                            "type": "entry"
-                        }
-                        c_data["movement_history"].append(ev)
-                        sess["event_logs"].insert(0, ev)
-                        new_events.append(ev)
+                    # Case 1: First time detected in this class session (Requires 5-second hold before entry is confirmed)
+                    if not c_data.get("first_detected_at"):
+                        if c_data.get("entry_start_dt") is None:
+                            c_data["entry_start_dt"] = now
+                            c_data["is_verifying_entry"] = True
 
-                    # If returning from stepped out
-                    elif old_status == "STEPPED_OUT":
-                        ev = {
-                            "id": f"ev-{uuid.uuid4().hex[:8]}",
-                            "candidate_id": u_id,
-                            "name": c_data["name"],
-                            "event": "RETURNED",
-                            "time": now_time,
-                            "timestamp": now_iso,
-                            "label": f"{c_data['name']} returned to class seat (Absent for {c_data.get('stepped_out_duration_sec', 0)}s)",
-                            "type": "return"
-                        }
-                        c_data["movement_history"].append(ev)
-                        sess["event_logs"].insert(0, ev)
-                        new_events.append(ev)
+                        hold_sec = max(0.0, (now - c_data["entry_start_dt"]).total_seconds())
 
-                    c_data["status"] = "PRESENT"
-                    c_data["last_seen_at"] = now_iso
-                    c_data["last_seen_time"] = now_time
-                    c_data["last_seen_timestamp"] = now.timestamp()
-                    c_data["stepped_out_at"] = None
-                    c_data["stepped_out_duration_sec"] = 0
-                    c_data["in_class_seconds"] = int(now.timestamp() - datetime.fromisoformat(c_data["first_detected_at"]).timestamp()) if c_data["first_detected_at"] else 0
+                        if hold_sec < 5.0:
+                            # In 5-second entry debounce hold
+                            c_data["status"] = "VERIFYING_ENTRY"
+                            c_data["hold_progress"] = round(hold_sec, 1)
+                            c_data["posture_label"] = f"🟢 Verifying Entry ({int(hold_sec)}s/5s)"
+                            face["classroom_status"] = "VERIFYING_ENTRY"
+                            face["is_enrolled"] = True
+                        else:
+                            # 5-second continuous presence confirmed! Mark entry attendance
+                            c_data["first_detected_at"] = now_iso
+                            c_data["first_detected_time"] = now_time
+                            c_data["entry_start_dt"] = None
+                            c_data["is_verifying_entry"] = False
+                            c_data["status"] = "PRESENT"
+                            c_data["posture_label"] = "Present in Class"
+                            c_data["last_seen_at"] = now_iso
+                            c_data["last_seen_time"] = now_time
+                            c_data["last_seen_timestamp"] = now.timestamp()
+                            c_data["stepped_out_at"] = None
+                            c_data["stepped_out_duration_sec"] = 0
+                            c_data["in_class_seconds"] = 5
 
-                    face["classroom_status"] = "PRESENT"
-                    face["is_enrolled"] = True
+                            ev = {
+                                "id": f"ev-{uuid.uuid4().hex[:8]}",
+                                "candidate_id": u_id,
+                                "name": c_data["name"],
+                                "event": "CLASS_ENTRY",
+                                "time": now_time,
+                                "timestamp": now_iso,
+                                "label": f"{c_data['name']} entered classroom (5s Verified Attendance)",
+                                "type": "entry"
+                            }
+                            c_data["movement_history"].append(ev)
+                            sess["event_logs"].insert(0, ev)
+                            new_events.append(ev)
+
+                            face["classroom_status"] = "PRESENT"
+                            face["is_enrolled"] = True
+
+                    # Case 2: Student was STEPPED_OUT and is now returning (Requires 5-second hold before return confirmed)
+                    elif old_status in ["STEPPED_OUT", "VERIFYING_RETURN"]:
+                        if c_data.get("return_start_dt") is None:
+                            c_data["return_start_dt"] = now
+                            c_data["is_verifying_return"] = True
+
+                        hold_sec = max(0.0, (now - c_data["return_start_dt"]).total_seconds())
+
+                        if hold_sec < 5.0:
+                            # In 5-second return debounce hold
+                            c_data["status"] = "VERIFYING_RETURN"
+                            c_data["hold_progress"] = round(hold_sec, 1)
+                            c_data["posture_label"] = f"🟢 Verifying Return ({int(hold_sec)}s/5s)"
+                            face["classroom_status"] = "VERIFYING_RETURN"
+                            face["is_enrolled"] = True
+                        else:
+                            # 5-second continuous return confirmed!
+                            away_sec = c_data.get("stepped_out_duration_sec", 0)
+                            c_data["status"] = "PRESENT"
+                            c_data["return_start_dt"] = None
+                            c_data["is_verifying_return"] = False
+                            c_data["posture_label"] = "Present in Class"
+                            c_data["last_seen_at"] = now_iso
+                            c_data["last_seen_time"] = now_time
+                            c_data["last_seen_timestamp"] = now.timestamp()
+                            c_data["stepped_out_at"] = None
+                            c_data["stepped_out_duration_sec"] = 0
+
+                            ev = {
+                                "id": f"ev-{uuid.uuid4().hex[:8]}",
+                                "candidate_id": u_id,
+                                "name": c_data["name"],
+                                "event": "RETURNED",
+                                "time": now_time,
+                                "timestamp": now_iso,
+                                "label": f"{c_data['name']} returned to class seat (Absent for {away_sec}s)",
+                                "type": "return"
+                            }
+                            c_data["movement_history"].append(ev)
+                            sess["event_logs"].insert(0, ev)
+                            new_events.append(ev)
+
+                            face["classroom_status"] = "PRESENT"
+                            face["is_enrolled"] = True
+
+                    # Case 3: Student already PRESENT
+                    else:
+                        c_data["status"] = "PRESENT"
+                        c_data["last_seen_at"] = now_iso
+                        c_data["last_seen_time"] = now_time
+                        c_data["last_seen_timestamp"] = now.timestamp()
+                        c_data["stepped_out_at"] = None
+                        c_data["stepped_out_duration_sec"] = 0
+                        c_data["entry_start_dt"] = None
+                        c_data["return_start_dt"] = None
+                        c_data["is_verifying_entry"] = False
+                        c_data["is_verifying_return"] = False
+                        c_data["in_class_seconds"] = int(now.timestamp() - datetime.fromisoformat(c_data["first_detected_at"]).timestamp()) if c_data.get("first_detected_at") else 0
+
+                        face["classroom_status"] = "PRESENT"
+                        face["is_enrolled"] = True
                 else:
                     other_u = self.get_user(u_id)
                     cand_name = other_u.get("name", "Guest Student") if other_u else "Guest Student"
@@ -2836,14 +2904,29 @@ class FaceDatabase:
                 face["classroom_status"] = "UNKNOWN"
                 face["is_enrolled"] = False
 
-        # 3. Check for students who stepped out (absent from camera > threshold)
+        # 3. Check for students who stepped out or left camera (with 5-second hold debounce)
         for u_id, c_data in sess["candidates"].items():
             if u_id not in seen_user_ids:
-                if c_data["first_detected_at"]:
+                # Cancel unconfirmed entry if face left before completing 5s
+                if c_data.get("entry_start_dt") is not None:
+                    c_data["entry_start_dt"] = None
+                    c_data["is_verifying_entry"] = False
+                    c_data["status"] = "ABSENT"
+                    c_data["posture_label"] = "Absent"
+
+                # Cancel unconfirmed return if face left before completing 5s
+                if c_data.get("return_start_dt") is not None:
+                    c_data["return_start_dt"] = None
+                    c_data["is_verifying_return"] = False
+                    c_data["status"] = "STEPPED_OUT"
+                    c_data["posture_label"] = f"Stepped Out ({c_data.get('stepped_out_duration_sec', 0)}s)"
+
+                if c_data.get("first_detected_at"):
                     last_seen_ts = c_data.get("last_seen_timestamp", 0)
                     elapsed = now.timestamp() - last_seen_ts
 
-                    if elapsed >= absence_threshold_sec:
+                    # 5-second hold / debounce: wait 5 seconds before triggering STEPPED_OUT
+                    if elapsed >= 5.0:
                         if c_data["status"] == "PRESENT":
                             c_data["status"] = "STEPPED_OUT"
                             c_data["stepped_out_at"] = now_iso
@@ -2863,6 +2946,7 @@ class FaceDatabase:
                             new_events.append(ev)
 
                         c_data["stepped_out_duration_sec"] = int(elapsed)
+                        c_data["posture_label"] = f"Stepped Out ({int(elapsed)}s)"
 
         # 4. Summarize session
         present_count = sum(1 for c in sess["candidates"].values() if c["status"] == "PRESENT")

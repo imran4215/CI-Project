@@ -264,5 +264,193 @@
       }
     },
     "event_logs": []
+  },
+  "class_room-101_CSE-1101_2026-09-20": {
+    "room_id": "room-101",
+    "department": "Computer Science & Engineering",
+    "course_code": "CSE-1101",
+    "course_name": "Structured Programming Language",
+    "day": "Sunday",
+    "time_slot": "05:30 AM - 06:50 AM",
+    "created_at": "2026-09-20T05:54:09.802121",
+    "candidates": {
+      "58700b1f": {
+        "id": "58700b1f",
+        "name": "Taslimul Alam",
+        "roll_id": "202314107",
+        "department": "Computer Science & Engineering",
+        "status": "ABSENT",
+        "first_detected_at": null,
+        "first_detected_time": null,
+        "last_seen_at": null,
+        "last_seen_time": null,
+        "last_seen_timestamp": 0,
+        "in_class_seconds": 0,
+        "stepped_out_at": null,
+        "stepped_out_time": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": []
+      },
+      "c73754c8": {
+        "id": "c73754c8",
+        "name": "Mohaimen Hridoy",
+        "roll_id": "202314099",
+        "department": "Computer Science & Engineering",
+        "status": "ABSENT",
+        "first_detected_at": null,
+        "first_detected_time": null,
+        "last_seen_at": null,
+        "last_seen_time": null,
+        "last_seen_timestamp": 0,
+        "in_class_seconds": 0,
+        "stepped_out_at": null,
+        "stepped_out_time": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": []
+      },
+      "d171c7d7": {
+        "id": "d171c7d7",
+        "name": "Sinlam",
+        "roll_id": "202314105",
+        "department": "Computer Science & Engineering",
+        "status": "ABSENT",
+        "first_detected_at": null,
+        "first_detected_time": null,
+        "last_seen_at": null,
+        "last_seen_time": null,
+        "last_seen_timestamp": 0,
+        "in_class_seconds": 0,
+        "stepped_out_at": null,
+        "stepped_out_time": null,
+        "stepped_out_duration_sec": 0,
+        "movement_history": []
+      },
+      "ac502693": {
+        "id": "ac502693",
+        "name": "Ahmed Al Imran",
+        "roll_id": "202314117",
+        "department": "Computer Science & Engineering",
+        "status": "PRESENT",
+        "first_detected_at": "2026-09-20T05:54:09.802121",
+        "first_detected_time": "05:54:09 AM",
+        "last_seen_at": "2026-09-20T06:05:56.288029",
+        "last_seen_time": "06:05:56 AM",
+        "last_seen_timestamp": 1789862756.288029,
+        "in_class_seconds": 706,
+        "stepped_out_at": null,
+        "stepped_out_time": "05:59:42 AM",
+        "stepped_out_duration_sec": 0,
+        "movement_history": [
+          {
+            "id": "ev-7d62e06f",
+            "candidate_id": "ac502693",
+            "name": "Ahmed Al Imran",
+            "event": "CLASS_ENTRY",
+            "time": "05:54:09 AM",
+            "timestamp": "2026-09-20T05:54:09.802121",
+            "label": "Ahmed Al Imran entered classroom (Attendance Auto-Marked)",
+            "type": "entry"
+          },
+          {
+            "id": "ev-7666d967",
+            "candidate_id": "ac502693",
+            "name": "Ahmed Al Imran",
+            "event": "STEPPED_OUT",
+            "time": "05:54:35 AM",
+            "timestamp": "2026-09-20T05:54:35.984357",
+            "label": "Ahmed Al Imran stepped out / left classroom view (15s)",
+            "type": "out"
+          },
+          {
+            "id": "ev-b2df2337",
+            "candidate_id": "ac502693",
+            "name": "Ahmed Al Imran",
+            "event": "RETURNED",
+            "time": "05:54:41 AM",
+            "timestamp": "2026-09-20T05:54:41.484629",
+            "label": "Ahmed Al Imran returned to class seat (Absent for 20s)",
+            "type": "return"
+          },
+          {
+            "id": "ev-e392be33",
+            "candidate_id": "ac502693",
+            "name": "Ahmed Al Imran",
+            "event": "STEPPED_OUT",
+            "time": "05:59:42 AM",
+            "timestamp": "2026-09-20T05:59:42.851967",
+            "label": "Ahmed Al Imran stepped out / left classroom view (5s)",
+            "type": "out"
+          },
+          {
+            "id": "ev-261f58bb",
+            "candidate_id": "ac502693",
+            "name": "Ahmed Al Imran",
+            "event": "RETURNED",
+            "time": "05:59:50 AM",
+            "timestamp": "2026-09-20T05:59:50.123123",
+            "label": "Ahmed Al Imran returned to class seat (Absent for 6s)",
+            "type": "return"
+          }
+        ],
+        "entry_start_dt": null,
+        "return_start_dt": null,
+        "is_verifying_entry": false,
+        "is_verifying_return": false,
+        "posture_label": "Present in Class",
+        "hold_progress": 4.7
+      }
+    },
+    "event_logs": [
+      {
+        "id": "ev-261f58bb",
+        "candidate_id": "ac502693",
+        "name": "Ahmed Al Imran",
+        "event": "RETURNED",
+        "time": "05:59:50 AM",
+        "timestamp": "2026-09-20T05:59:50.123123",
+        "label": "Ahmed Al Imran returned to class seat (Absent for 6s)",
+        "type": "return"
+      },
+      {
+        "id": "ev-e392be33",
+        "candidate_id": "ac502693",
+        "name": "Ahmed Al Imran",
+        "event": "STEPPED_OUT",
+        "time": "05:59:42 AM",
+        "timestamp": "2026-09-20T05:59:42.851967",
+        "label": "Ahmed Al Imran stepped out / left classroom view (5s)",
+        "type": "out"
+      },
+      {
+        "id": "ev-b2df2337",
+        "candidate_id": "ac502693",
+        "name": "Ahmed Al Imran",
+        "event": "RETURNED",
+        "time": "05:54:41 AM",
+        "timestamp": "2026-09-20T05:54:41.484629",
+        "label": "Ahmed Al Imran returned to class seat (Absent for 20s)",
+        "type": "return"
+      },
+      {
+        "id": "ev-7666d967",
+        "candidate_id": "ac502693",
+        "name": "Ahmed Al Imran",
+        "event": "STEPPED_OUT",
+        "time": "05:54:35 AM",
+        "timestamp": "2026-09-20T05:54:35.984357",
+        "label": "Ahmed Al Imran stepped out / left classroom view (15s)",
+        "type": "out"
+      },
+      {
+        "id": "ev-7d62e06f",
+        "candidate_id": "ac502693",
+        "name": "Ahmed Al Imran",
+        "event": "CLASS_ENTRY",
+        "time": "05:54:09 AM",
+        "timestamp": "2026-09-20T05:54:09.802121",
+        "label": "Ahmed Al Imran entered classroom (Attendance Auto-Marked)",
+        "type": "entry"
+      }
+    ]
   }
 }

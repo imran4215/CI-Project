@@ -43,6 +43,8 @@ export function ClassroomMonitor() {
     triggerAudio,
     triggerVoice,
     addToast,
+    routines: globalRoutines,
+    loadRoutines,
   } = useApp();
 
   const videoRef = useRef(null);
@@ -123,35 +125,58 @@ export function ClassroomMonitor() {
     }
   }, [selectedRoomId]);
 
+  // Initial fetch and room change
   useEffect(() => {
     loadRoutinesForRoom();
   }, [loadRoutinesForRoom]);
 
-  // Helper to parse time string (e.g. "09:00", "01:00 PM", "14:30", "03:00") to total minutes from midnight
+  // Live Auto-Sync: Poll room routines every 3 seconds to reflect live DB additions instantly
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadRoutinesForRoom();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [loadRoutinesForRoom]);
+
+  // Sync when global AppContext routines change
+  useEffect(() => {
+    if (globalRoutines && globalRoutines.length > 0 && selectedRoomId) {
+      const roomSpecific = globalRoutines.filter((r) => r.room_id === selectedRoomId);
+      if (roomSpecific.length > 0) {
+        setRoutines(roomSpecific);
+      }
+    }
+  }, [globalRoutines, selectedRoomId]);
+
+  // Helper to parse time string (e.g. "05:30", "5.30 AM", "01:00 PM", "14:30") to total minutes from midnight
   const parseTimeToMinutes = (timeStr) => {
     if (!timeStr) return null;
-    const str = timeStr.trim().toUpperCase();
+    // Replace dots with colons (e.g. 5.30 -> 5:30)
+    let str = timeStr.toString().trim().toUpperCase().replace(/\./g, ":");
     const isPm = str.includes("PM");
     const isAm = str.includes("AM");
     const cleanStr = str.replace(/(AM|PM)/g, "").trim();
     const parts = cleanStr.split(":");
-    if (parts.length < 2) return null;
+    if (parts.length < 2) {
+      const h = parseInt(parts[0], 10);
+      if (!isNaN(h)) {
+        let hours = h;
+        if (isPm && hours < 12) hours += 12;
+        if (isAm && hours === 12) hours = 0;
+        return hours * 60;
+      }
+      return null;
+    }
     let hours = parseInt(parts[0], 10);
-    const mins = parseInt(parts[1], 10);
-    if (isNaN(hours) || isNaN(mins)) return null;
+    const mins = parseInt(parts[1], 10) || 0;
+    if (isNaN(hours)) return null;
 
     if (isPm) {
       if (hours < 12) hours += 12;
     } else if (isAm) {
       if (hours === 12) hours = 0;
-    } else {
-      // In academic schedules without explicit AM/PM, hours 1..6 represent afternoon PM (13:00..18:00)
-      if (hours >= 1 && hours <= 6) {
-        hours += 12;
-      }
-      // hours 7..12 represent daytime morning/noon
-      // hours >= 13 represent 24-hour military time
     }
+    // Note: In standard 24h military time without AM/PM, hours is already 0..23!
     return hours * 60 + mins;
   };
 
@@ -163,7 +188,12 @@ export function ClassroomMonitor() {
       if (s !== null && e !== null) return { startMins: s, endMins: e };
     }
     if (!slotStr) return null;
-    const parts = slotStr.split("-");
+    // Support separators: " - ", " to ", " TO ", " – ", " — ", "-"
+    const normalized = slotStr
+      .toString()
+      .replace(/\s+(TO|–|—)\s+/gi, " - ")
+      .replace(/\s*-\s*/g, " - ");
+    const parts = normalized.split(" - ");
     if (parts.length !== 2) return null;
     const s = parseTimeToMinutes(parts[0]);
     const e = parseTimeToMinutes(parts[1]);
@@ -924,6 +954,8 @@ export function ClassroomMonitor() {
                     filteredRoster.map((candidate) => {
                       const inClassMins = Math.round((candidate.in_class_seconds || 0) / 60);
                       const isQualified = inClassMins >= minAttendanceMins;
+                      const isVerifyingEntry = candidate.status === "VERIFYING_ENTRY";
+                      const isVerifyingReturn = candidate.status === "VERIFYING_RETURN";
                       const isPresent = candidate.status === "PRESENT";
                       const isSteppedOut = candidate.status === "STEPPED_OUT";
                       const isAbsent = candidate.status === "ABSENT";
@@ -933,7 +965,9 @@ export function ClassroomMonitor() {
                           key={candidate.id}
                           onClick={() => setSelectedHistoryCandidate(candidate)}
                           className={`p-2.5 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 hover:translate-x-0.5 ${
-                            isPresent && isQualified
+                            isVerifyingEntry || isVerifyingReturn
+                              ? "bg-cyan-950/30 border-cyan-500/50 shadow-neon-cyan animate-pulse"
+                              : isPresent && isQualified
                               ? "bg-emerald-950/20 border-emerald-500/30 hover:border-emerald-500/60"
                               : isPresent && !isQualified
                               ? "bg-amber-950/20 border-amber-500/30 hover:border-amber-500/60"
@@ -945,7 +979,9 @@ export function ClassroomMonitor() {
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div
                               className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                                isPresent && isQualified
+                                isVerifyingEntry || isVerifyingReturn
+                                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                                  : isPresent && isQualified
                                   ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                                   : isPresent && !isQualified
                                   ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
@@ -967,6 +1003,18 @@ export function ClassroomMonitor() {
                                 )}
                               </div>
                               <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                {isVerifyingEntry && (
+                                  <span className="text-cyan-400 font-medium flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-cyan-400 animate-spin" />
+                                    {candidate.posture_label || `Verifying Entry (${candidate.hold_progress || 0}s/5s)`}
+                                  </span>
+                                )}
+                                {isVerifyingReturn && (
+                                  <span className="text-cyan-400 font-medium flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-cyan-400 animate-spin" />
+                                    {candidate.posture_label || `Verifying Return (${candidate.hold_progress || 0}s/5s)`}
+                                  </span>
+                                )}
                                 {isPresent && isQualified && (
                                   <span className="text-emerald-400 font-medium flex items-center gap-1">
                                     <CheckCircle2 className="w-3 h-3 text-emerald-400" />
@@ -994,7 +1042,9 @@ export function ClassroomMonitor() {
                           <div className="flex flex-col items-end flex-shrink-0">
                             <span
                               className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ${
-                                isPresent && isQualified
+                                isVerifyingEntry || isVerifyingReturn
+                                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40 animate-pulse"
+                                  : isPresent && isQualified
                                   ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                                   : isPresent && !isQualified
                                   ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
@@ -1003,7 +1053,13 @@ export function ClassroomMonitor() {
                                   : "bg-rose-500/10 text-rose-400 border-rose-500/30"
                               }`}
                             >
-                              {isPresent && !isQualified ? `<${minAttendanceMins}m Low` : candidate.status}
+                              {isVerifyingEntry
+                                ? "HOLD (5s)"
+                                : isVerifyingReturn
+                                ? "HOLD (5s)"
+                                : isPresent && !isQualified
+                                ? `<${minAttendanceMins}m Low`
+                                : candidate.status}
                             </span>
                             <span className="text-[9px] text-indigo-400 hover:underline mt-1 flex items-center gap-0.5">
                               <History className="w-2.5 h-2.5" /> Log

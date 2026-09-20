@@ -38,9 +38,9 @@
     "special_clearance_by": null,
     "updated_at": "2026-09-14T12:20:34.195270"
   },
-  "faea207a": {
-    "candidate_id": "faea207a",
-    "name": "Imran",
+  "ac502693": {
+    "candidate_id": "ac502693",
+    "name": "Ahmed Al Imran",
     "roll_id": "202314117",
     "department": "Computer Science & Engineering",
     "room_id": "room-101",
@@ -49,6 +49,6 @@
     "admit_status": "CLEARED",
     "remarks": "Cleared",
     "special_clearance_by": null,
-    "updated_at": "2026-09-19T23:59:40.779486"
+    "updated_at": "2026-09-20T05:39:32.825454"
   }
 }
